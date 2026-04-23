@@ -1,0 +1,8 @@
+{
+  "python.defaultInterpreterPath": "D:/anaconda3/envs/garveyclaw/python.exe",
+  "python.analysis.extraPaths": ["./src"],
+  "python.analysis.autoImportCompletions": true,
+  "python-envs.defaultEnvManager": "ms-python.python:conda",
+  "python-envs.defaultPackageManager": "ms-python.python:conda",
+  "python-envs.pythonProjects": []
+}

@@ -1,0 +1,2 @@
+这是课程版机器人的示例文件。
+你可以让 Claude 读取这个文件，并观察 session、memory、tools、scheduler 如何协同工作。
