@@ -18,5 +18,7 @@ wheels/
 # Runtime data
 data/*.json
 data/*.db
+workspace/memory/CLAUDE.md
 workspace/memory/conversations/
+workspace_course/memory_course/CLAUDE.md
 workspace_course/memory_course/conversations/
