@@ -13,7 +13,15 @@ from telegram.ext import (
 
 from garveyclaw.access import is_owner
 from garveyclaw.claude_client import ClaudeServiceError, ask_claude
-from garveyclaw.config import TELEGRAM_BOT_TOKEN
+from garveyclaw.config import (
+    TELEGRAM_BOOTSTRAP_RETRIES,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CONNECT_TIMEOUT,
+    TELEGRAM_POLLING_TIMEOUT,
+    TELEGRAM_POOL_TIMEOUT,
+    TELEGRAM_READ_TIMEOUT,
+    TELEGRAM_WRITE_TIMEOUT,
+)
 from garveyclaw.media_store import save_photo_message
 from garveyclaw.memory_store import append_long_term_memory, load_long_term_memory
 from garveyclaw.scheduler import (
@@ -337,7 +345,20 @@ async def post_init(application: Application) -> None:
 def build_application() -> Application:
     """创建 Telegram 应用并注册命令、消息和错误处理器。"""
 
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+    app = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .connect_timeout(TELEGRAM_CONNECT_TIMEOUT)
+        .read_timeout(TELEGRAM_READ_TIMEOUT)
+        .write_timeout(TELEGRAM_WRITE_TIMEOUT)
+        .pool_timeout(TELEGRAM_POOL_TIMEOUT)
+        .get_updates_connect_timeout(TELEGRAM_CONNECT_TIMEOUT)
+        .get_updates_read_timeout(TELEGRAM_READ_TIMEOUT)
+        .get_updates_write_timeout(TELEGRAM_WRITE_TIMEOUT)
+        .get_updates_pool_timeout(TELEGRAM_POOL_TIMEOUT)
+        .post_init(post_init)
+        .build()
+    )
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("memory", show_memory))
     app.add_handler(CommandHandler("remember", remember))
@@ -350,3 +371,12 @@ def build_application() -> Application:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
     return app
+
+
+def run_polling_options() -> dict[str, int]:
+    """集中提供 Telegram 轮询启动参数。"""
+
+    return {
+        "timeout": TELEGRAM_POLLING_TIMEOUT,
+        "bootstrap_retries": TELEGRAM_BOOTSTRAP_RETRIES,
+    }

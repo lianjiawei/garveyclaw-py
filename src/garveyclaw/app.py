@@ -1,12 +1,15 @@
 import logging
 
-from garveyclaw.telegram_bot import build_application
+from telegram.error import TimedOut
+
+from garveyclaw.telegram_bot import build_application, run_polling_options
 
 logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    # 程序入口：初始化日志后启动 Telegram 轮询。
+    """程序入口：初始化日志后启动 Telegram 轮询。"""
+
     logging.basicConfig(
         level=logging.WARNING,
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -22,12 +25,12 @@ def main() -> None:
     app = build_application()
     print("Bot is running...")
     try:
-        app.run_polling()
+        app.run_polling(**run_polling_options())
     except KeyboardInterrupt:
-        # Ctrl + C 属于正常停止。
         print("Bot stopped.")
+    except TimedOut:
+        logger.warning("Bot startup timed out while connecting to Telegram. Please check network or proxy settings.")
     except Exception as exc:
-        # 启动阶段异常统一在这里收口，避免终端直接刷出整段堆栈。
         logger.warning("Bot stopped because startup failed: %s", exc.__class__.__name__)
 
 
