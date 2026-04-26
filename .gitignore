@@ -15,9 +15,8 @@ wheels/
 # Local environment and secrets
 .env
 
-# Runtime data
-data/*.json
-data/*.db
+# Runtime data and private local state
+data/
 workspace/memory/CLAUDE.md
 workspace/memory/conversations/
 workspace/uploads/

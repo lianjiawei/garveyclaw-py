@@ -1,348 +1,418 @@
-# garveyclaw-py
+# GarveyClaw Py
 
-一个基于 Claude Agent SDK 和 Telegram Bot 的个人 Agent 项目。
+GarveyClaw Py 是一个基于 Claude Agent SDK 和 Telegram Bot 的个人智能体项目。它把 Telegram 作为交互入口，把 Claude Code / Claude Agent SDK 作为智能体运行核心，并逐步接入工具、记忆、定时任务、图片理解、语音转文字和 Skill 能力。
 
-它既包含一套可以继续扩展的正式工程，也包含一份适合学习和培训的课程版代码。
+这个项目适合两类用途：
 
-如果你想快速理解这个项目，推荐先看：
+- 作为个人长期运行的 Telegram AI Agent。
+- 作为学习 Claude Agent SDK、MCP 工具、自定义 Agent 能力的工程样板。
 
-- 正式工程入口：[src/garveyclaw](/E:/AICode/AIProRepo/garveyclaw_py/src/garveyclaw)
-- 课程版单文件：[claw_course_bot.py](/E:/AICode/AIProRepo/garveyclaw_py/claw_course_bot.py)
-- 课程教材：[COURSE_GUIDE.md](/E:/AICode/AIProRepo/garveyclaw_py/COURSE_GUIDE.md)
+## 功能特性
 
-当前项目已经具备这些能力：
+- Telegram 文本、图片、语音消息处理。
+- Claude Agent SDK 模型调用。
+- Claude Code 内置工具显性化，例如 `Read`、`Write`、`Edit`、`Glob`、`Grep`、`WebSearch`、`WebFetch`、`Bash`。
+- 自定义 MCP 工具，例如获取时间、读取工作区文件、发送 Telegram 消息。
+- Owner 权限控制，只处理指定 Telegram 用户的消息。
+- 连续会话，通过本地 `session_id` 维持上下文。
+- 长期记忆，使用 `CLAUDE.md` 和按天归档的对话记录。
+- 定时任务，支持一次性、每天、每周任务。
+- 自然语言创建定时提醒，例如“30秒后提醒我喝水”。
+- Skill 能力，目前包含表格数据分析与校验 Skill。
+- 可选本地 ASR，使用 `ffmpeg` + Vosk 处理 Telegram 语音消息。
 
-- 通过 Telegram 接收消息并回复
-- 使用 Claude Agent SDK 调用模型服务
-- 支持常见 Markdown 在 Telegram 中的格式化显示
-- 支持内置 Claude 工具和自定义 MCP 工具
-- 支持工作区目录内的文件工具
-- 支持只允许指定 owner 使用机器人
-- 支持连续会话和会话重置
-- 支持长期记忆文件和对话记录落盘
-- 支持单次 / 每天 / 每周定时任务
-- 支持简单自然语言创建定时任务
+## 环境要求
 
-## 快速开始
+建议使用独立 Conda 环境运行，不要混用系统 Python 或其他项目环境。
 
-如果你只是想把这个 Agent 跑起来，按下面 4 步做就够了：
+基础要求：
 
-1. 创建并激活 Conda 环境
+- Python `>=3.12`
+- Conda 或 Miniconda
+- Git
+- 一个 Telegram Bot Token
+- 一个兼容 Anthropic API 协议的模型服务
+
+可选语音识别要求：
+
+- `ffmpeg`
+- Vosk Python 包
+- Vosk 中文模型
+
+## 安装
+
+1. 克隆项目
+
+```powershell
+git clone git@github.com:lianjiawei/garveyclaw-py.git
+cd garveyclaw-py
+```
+
+2. 创建并激活 Conda 环境
 
 ```powershell
 conda create -n garveyclaw python=3.12 -y
 conda activate garveyclaw
 ```
 
-2. 安装依赖
+3. 安装项目依赖
 
 ```powershell
 python -m pip install -e .
 ```
 
-3. 复制环境变量模板并填写你自己的配置
+如果需要语音转文字能力，安装 ASR 可选依赖：
+
+```powershell
+python -m pip install -e ".[asr]"
+```
+
+4. 确认 Claude Code CLI 可用
+
+本项目通过 Claude Agent SDK 调用 Claude Code 能力。SDK 底层会启动 Claude Code CLI 子进程，通常会优先使用 SDK 包中自带的 bundled CLI，不需要额外手动安装 Claude Code CLI。
+
+如果运行时报 `Claude Code not found`，再安装 Claude Code CLI，或确保系统 PATH 中可以找到 `claude` 命令。也可以用下面的命令检查当前系统是否已经有全局 `claude`：
+
+```powershell
+claude --version
+```
+
+注意：即使上面的命令不存在，只要 SDK 自带的 bundled CLI 可用，项目仍然可以正常运行。
+
+## 配置
+
+项目通过 `.env` 读取运行配置。仓库只提供 `.env.example`，真实 `.env` 不应该提交到 GitHub。
+
+复制配置模板：
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-至少需要改这些值：
+然后把 `.env` 里的占位值替换成你自己的配置。
 
-- `TELEGRAM_BOT_TOKEN`
-- `OWNER_ID`
-- `ANTHROPIC_API_KEY`
-- `ANTHROPIC_BASE_URL`
-
-4. 启动正式工程
-
-```powershell
-python -m garveyclaw
-```
-
-启动成功后终端会看到：
-
-```text
-Bot is running...
-```
-
-## 项目结构
-
-```text
-garveyclaw_py/
-├─ pyproject.toml
-├─ .env
-├─ claw_course_bot.py
-├─ COURSE_GUIDE.md
-└─ src/
-   └─ garveyclaw/
-      ├─ __main__.py
-      ├─ access.py
-      ├─ agent_tools.py
-      ├─ app.py
-      ├─ claude_client.py
-      ├─ config.py
-      ├─ memory_store.py
-      ├─ scheduler.py
-      ├─ scheduler_store.py
-      ├─ session_store.py
-      ├─ telegram_bot.py
-      └─ telegram_formatting.py
-```
-
-各模块职责如下：
-
-- `app.py`：程序入口，初始化日志并启动 Telegram 轮询
-- `config.py`：读取 `.env` 并提供运行配置
-- `access.py`：处理 owner 身份判断
-- `agent_tools.py`：定义工作区工具和 Telegram 发送工具
-- `claude_client.py`：组装 Claude 运行时、工具、hooks 和模型调用逻辑
-- `memory_store.py`：负责长期记忆文件和对话记录的读写
-- `scheduler_store.py`：负责定时任务数据库初始化
-- `scheduler.py`：负责定时任务解析、存储、调度执行与任务管理
-- `session_store.py`：负责本地 session_id 的读写和清空
-- `telegram_bot.py`：处理 Telegram 命令、消息和异常
-- `telegram_formatting.py`：把常见 Markdown 转成 Telegram 可渲染的 HTML
-- `claw_course_bot.py`：课程版单文件示例
-- `COURSE_GUIDE.md`：课程版教材
-
-## 环境准备
-
-推荐使用独立的 Conda 环境：
-
-```powershell
-conda create -n garveyclaw python=3.12 -y
-conda activate garveyclaw
-python -m pip install -e .
-```
-
-## 环境变量
-
-项目通过 `.env` 读取配置。仓库中已经提供了示例文件：
-
-- `.env.example`
-
-拿到项目后，建议先复制一份：
-
-```powershell
-Copy-Item .env.example .env
-```
-
-然后把 `.env` 里的占位值替换成你自己的真实配置。
-
-至少需要这些变量：
+最小必填配置：
 
 ```env
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 OWNER_ID=your_telegram_user_id
 ANTHROPIC_API_KEY=your_api_key
 ANTHROPIC_BASE_URL=https://your-compatible-endpoint
-ANTHROPIC_MODEL=qwen3.6-plus
+ANTHROPIC_MODEL=your_model_name
 ```
 
-可选变量：
+常用配置说明：
+
+- `TELEGRAM_BOT_TOKEN`：Telegram Bot Token，可以从 BotFather 获取。
+- `OWNER_ID`：允许使用机器人的 Telegram 用户 ID，非 owner 用户会被忽略。
+- `ANTHROPIC_API_KEY`：模型服务 API Key。
+- `ANTHROPIC_BASE_URL`：兼容 Anthropic API 的服务地址。
+- `ANTHROPIC_MODEL`：默认主模型名称。
+- `WORKSPACE_DIR`：Agent 可以操作的工作区目录，默认是项目下的 `workspace/`。
+- `SHOW_TOOL_TRACE`：是否把工具调用过程发送到 Telegram，`1` 开启，`0` 关闭。
+- `SCHEDULER_INTERVAL_SECONDS`：定时任务轮询间隔，默认 `30` 秒。
+
+DeepSeek 模型分组示例：
 
 ```env
-WORKSPACE_DIR=E:\AICode\AIProRepo\garveyclaw_py\workspace
+ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro
+ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro
+ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash
+CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-pro
 ```
 
-说明：
+Claude Code 行为控制示例：
 
-- `TELEGRAM_BOT_TOKEN`：Telegram 机器人令牌
-- `OWNER_ID`：允许使用机器人的 Telegram 用户 ID
-- `ANTHROPIC_API_KEY`：模型服务鉴权 key
-- `ANTHROPIC_BASE_URL`：兼容 Anthropic 协议的服务地址
-- `ANTHROPIC_MODEL`：默认模型名
-- `WORKSPACE_DIR`：工具默认工作的目录；不配置时默认使用项目根目录下的 `workspace/`
-- `SCHEDULER_INTERVAL_SECONDS`：定时任务轮询间隔，默认 `30`
+```env
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1
+CLAUDE_CODE_EFFORT_LEVEL=max
+```
 
-运行时还会自动在项目根目录创建：
+## 语音识别配置
 
-- `data/garveyclaw_session.json`：用于保存当前连续会话的 `session_id`
-- `data/garveyclaw_tasks.db`：用于保存定时任务
+语音识别是可选功能。不开启时，机器人仍然可以正常处理文本和图片。
 
-并在工作区目录下维护：
+1. 安装 `ffmpeg`
 
-- `memory/CLAUDE.md`：长期记忆文件
-- `memory/conversations/YYYY-MM-DD.jsonl`：按天归档的对话记录
+Windows 可以使用 winget：
 
-## 启动方式
+```powershell
+winget install Gyan.FFmpeg
+```
 
-推荐方式：
+安装后确认：
+
+```powershell
+ffmpeg -version
+```
+
+2. 安装 ASR 可选依赖
+
+```powershell
+python -m pip install -e ".[asr]"
+```
+
+3. 下载 Vosk 中文模型
+
+模型下载地址：
+
+[Vosk Models](https://alphacephei.com/vosk/models)
+
+轻量中文模型推荐：
+
+- `vosk-model-small-cn-0.22`
+
+解压后在 `.env` 中配置：
+
+```env
+ASR_PROVIDER=vosk
+VOSK_MODEL_DIR=E:\AICode\Models\vosk-model-small-cn-0.22
+```
+
+如果暂时不使用语音识别：
+
+```env
+ASR_PROVIDER=none
+```
+
+## 启动
+
+推荐启动方式：
 
 ```powershell
 python -m garveyclaw
 ```
 
-如果已经执行过 `pip install -e .`，也可以直接运行：
+如果已经执行过 `python -m pip install -e .`，也可以使用脚本入口：
 
 ```powershell
 garveyclaw
 ```
 
-启动成功后终端会看到：
+启动成功后，终端会显示：
 
 ```text
 Bot is running...
 ```
 
-如果你想运行课程版单文件，而不是正式工程，可以执行：
+本地开发时，按 `Ctrl + C` 可以停止机器人。
 
-```powershell
-python claw_course_bot.py
+## Telegram 使用
+
+基础命令：
+
+- `/start`：查看机器人简介。
+- `/reset`：清空当前连续会话。
+- `/memory`：查看长期记忆。
+- `/remember 内容`：追加一条长期记忆。
+- `/skills`：查看可用 Skills。
+- `/tasks`：查看待执行定时任务。
+- `/cancel 任务ID`：取消定时任务。
+- `/schedule_in 秒数 内容`：创建一个命令式延迟任务。
+
+自然语言示例：
+
+```text
+30秒后提醒我喝水
+明天早上9点提醒我整理日报
+每天下午3点提醒我站起来活动一下
+每周一早上9点提醒我开例会
 ```
 
-## 克隆后如何替换成自己的配置
+图片和语音：
 
-如果别人把这个项目克隆到自己的电脑上，通常只需要改这几类内容就能运行：
+- 发送图片时，机器人会保存图片并把图片路径交给 Agent 处理。
+- 发送语音时，如果开启 ASR，机器人会先转写语音，再把转写文本交给 Agent 处理。
 
-1. 替换 `.env` 中的私有配置
+## 项目结构
 
-- `TELEGRAM_BOT_TOKEN`
-- `OWNER_ID`
-- `ANTHROPIC_API_KEY`
-- `ANTHROPIC_BASE_URL`
-- `ANTHROPIC_MODEL`
-
-2. 按需要修改工作区目录
-
-如果不想用默认的 `workspace/`，可以在 `.env` 中修改：
-
-```env
-WORKSPACE_DIR=你的项目工作区路径
+```text
+garveyclaw_py/
+├─ pyproject.toml
+├─ .env.example
+├─ README.md
+├─ COURSE_GUIDE.md
+├─ claw_course_bot.py
+├─ skills/
+│  └─ table_analysis_skill.md
+├─ src/
+│  └─ garveyclaw/
+│     ├─ __main__.py
+│     ├─ access.py
+│     ├─ agent_tools.py
+│     ├─ app.py
+│     ├─ claude_client.py
+│     ├─ config.py
+│     ├─ media_store.py
+│     ├─ memory_store.py
+│     ├─ scheduler.py
+│     ├─ scheduler_store.py
+│     ├─ session_store.py
+│     ├─ skill_store.py
+│     ├─ speech_client.py
+│     ├─ telegram_bot.py
+│     └─ telegram_formatting.py
+├─ data/
+└─ workspace/
 ```
 
-3. 如果要改课程版文件名
+核心模块说明：
 
-当前课程版文件是：
+- `app.py`：程序入口，初始化日志并启动 Telegram 轮询。
+- `config.py`：读取 `.env` 并提供全局配置。
+- `access.py`：Owner 权限判断。
+- `telegram_bot.py`：Telegram 命令、文本、图片、语音和异常处理。
+- `claude_client.py`：封装 Claude Agent SDK 调用、工具配置、会话和记忆注入。
+- `agent_tools.py`：自定义 MCP 工具。
+- `media_store.py`：保存 Telegram 图片和语音文件。
+- `speech_client.py`：语音识别抽象层，目前支持 Vosk。
+- `memory_store.py`：长期记忆和对话记录。
+- `session_store.py`：连续会话 `session_id` 读写。
+- `scheduler.py`：定时任务解析、创建、执行和管理。
+- `scheduler_store.py`：定时任务 SQLite 表初始化和读写。
+- `skill_store.py`：Skill 加载和查询。
+- `telegram_formatting.py`：把常见 Markdown 转成 Telegram 可渲染 HTML。
 
-- `claw_course_bot.py`
+## 运行数据
 
-如果你想把它改成自己的名字，比如：
+运行过程中会自动生成一些本地数据，这些文件默认不会提交到 GitHub。
 
-- `my_agent_bot.py`
+```text
+data/
+├─ garveyclaw_session.json
+└─ garveyclaw_tasks.db
 
-那么通常只需要改：
-
-- 文件名本身
-- 课程文档里对这个文件名的引用
-- 如果代码中的启动提示文案想一起个性化，也可以顺手调整
-
-代码逻辑本身不会因为文件名变化而失效，因为当前课程版没有依赖固定模块导入名。
-
-## 部署建议
-
-本地开发阶段，直接运行：
-
-```powershell
-python -m garveyclaw
+workspace/
+├─ memory/
+│  ├─ CLAUDE.md
+│  └─ conversations/
+└─ uploads/
+   ├─ images/
+   └─ voices/
 ```
 
-如果你准备长期运行这个 Agent，建议至少做到下面几点：
+说明：
 
-1. 使用独立的 Conda 环境
+- `data/garveyclaw_session.json`：保存连续会话 ID。
+- `data/garveyclaw_tasks.db`：保存定时任务。
+- `workspace/memory/CLAUDE.md`：长期记忆文件。
+- `workspace/memory/conversations/`：按天保存对话记录。
+- `workspace/uploads/images/`：保存 Telegram 图片。
+- `workspace/uploads/voices/`：保存 Telegram 语音。
 
-- 不要把项目依赖混在系统 Python 或别的项目环境里
+这些目录可能包含隐私信息，部署和备份时要单独处理。
 
-2. 单独保存 `.env`
+## Skill 能力
 
-- 真实 `.env` 不要上传 GitHub
-- 仓库里只保留 `.env.example`
+当前项目内置一个表格分析 Skill：
 
-3. 保留 `data/` 和 `workspace/`
+```text
+skills/table_analysis_skill.md
+```
 
-- `data/` 里保存 session 和定时任务数据库
-- `workspace/` 里保存长期记忆和对话记录
+它适合用于：
 
-4. 用守护方式常驻
+- 读取表格。
+- 提取关键数据。
+- 判断表格中的合计、分项、口径是否一致。
+- 辅助完成简单的数据校验和分析。
 
-Windows 本地可以先简单保持终端运行；如果后面上服务器，再考虑：
+查看 Skills：
 
-- Windows 任务计划
-- `pm2`
-- `supervisor`
-- Docker / 容器化
+```text
+/skills
+```
 
-5. 先从 owner 单用户模式开始
+查看指定 Skill：
 
-- 当前项目默认只服务 `OWNER_ID`
-- 这样更安全，也更适合个人 Agent 阶段
+```text
+/skills table
+```
 
-## 当前工具能力
-
-当前正式工程已经接入这些工具：
-
-- `get_current_time`：获取当前服务器本地时间
-- `list_workspace_files`：列出工作区顶层文件和目录
-- `read_workspace_file`：读取工作区内文本文件
-- `send_message`：向当前 Telegram 会话额外发送一条消息
-
-同时还开启了 Claude Code 内置工具集，可在白名单允许时使用：
-
-- `Read`
-- `Write`
-- `Edit`
-- `Glob`
-- `Grep`
-- `WebSearch`
-- `WebFetch`
-- `Bash`
-
-## 定时任务能力
-
-当前正式工程已经支持：
-
-- `/schedule_in 秒数 任务内容`：命令式创建单次任务
-- `/tasks`：查看当前待执行任务
-- `/cancel 任务ID`：取消任务
-
-同时也支持简单自然语言定时表达，例如：
-
-- `30秒后提醒我喝水`
-- `今晚8点提醒我开会`
-- `明天早上9点提醒我整理日报`
-- `每天下午3点提醒我站起来活动一下`
-- `每周一早上9点提醒我开例会`
+## 定时任务
 
 定时任务保存在：
 
-- `data/garveyclaw_tasks.db`
+```text
+data/garveyclaw_tasks.db
+```
 
-## 权限说明
+支持类型：
 
-- 只有 `OWNER_ID` 对应的 Telegram 用户会被处理
-- 其他用户发送 `/start` 或普通消息时，机器人会直接忽略
-- 文件工具只允许访问工作区目录内的路径
+- 一次性任务。
+- 每天重复任务。
+- 每周重复任务。
 
-## 会话说明
+定时任务调度器默认每 `30` 秒检查一次到期任务，可以通过 `.env` 调整：
 
-- 机器人会把当前会话的 `session_id` 保存到 `data/garveyclaw_session.json`
-- 下一条消息会优先尝试恢复这个 session，从而实现连续会话
-- 可以通过 `/reset` 清空本地保存的 session，下一条消息会从新会话开始
+```env
+SCHEDULER_INTERVAL_SECONDS=30
+```
 
-## 记忆说明
+## 安全说明
 
-- 长期稳定信息保存在工作区下的 `memory/CLAUDE.md`
-- 每轮对话会追加保存到 `memory/conversations/` 下按日期命名的 `jsonl` 文件
-- 可以通过 `/memory` 查看当前长期记忆内容
-- 可以通过 `/remember 你的内容` 追加一条长期记忆
+- 不要提交 `.env`。
+- 不要提交 `data/` 中的数据库和 session 文件。
+- 不要提交 `workspace/memory/` 中的记忆和对话记录。
+- 不要提交 `workspace/uploads/` 中的图片和语音。
+- 建议只给自己的 Telegram 用户 ID 配置 `OWNER_ID`。
+- 如果开放给多人使用，需要重新设计权限、配额、审计和数据隔离。
 
-## 异常处理
+## 常见问题
 
-当前项目已经补了基础异常处理：
+### `python -m garveyclaw` 是什么意思？
 
-- 模型调用失败时，会给用户返回友好的失败提示
-- Telegram 格式化发送失败时，会自动回退成纯文本
-- Telegram 网络或 API 异常会记录日志，并提示稍后重试
-- 未捕获异常会进入全局错误处理器，便于排查
+`-m` 表示把 `garveyclaw` 当作 Python 模块运行。Python 会寻找 `garveyclaw/__main__.py`，再从那里启动程序。
 
-## 日志说明
+### 为什么推荐 `python -m pip install -e .`？
 
-当前默认日志策略偏安静，主要保留警告和错误：
+`-e` 是 editable install，表示以可编辑模式安装当前项目。这样源码改动后不需要反复重新安装，适合开发阶段。
 
-- 正常轮询过程不会持续刷 `httpx` 请求日志
-- 模型调用失败、Telegram 发送失败等问题仍会输出日志
-- 启动成功时会输出 `Bot is running...`
+### 为什么 Telegram 搜索工具失败，但 Bash 抓网页可以成功？
 
-## 停止运行
+Claude Code 的 `WebSearch`、`WebFetch` 是否可用取决于当前模型服务和 Claude Code 运行环境；Bash 访问网络则取决于本机网络和命令行工具。两者不是同一条链路。
 
-本地开发时，直接在终端按 `Ctrl + C` 即可停止机器人。
+### Vosk 启动时打印很多 `VoskAPI` 日志正常吗？
+
+正常。那是 Vosk 加载模型时输出的内部日志。只要没有 `ERROR`，通常不影响使用。
+
+### 定时任务日志提示 `missed by 0:00:01` 是错误吗？
+
+通常不是。它表示某次定时检查因为程序当时忙，晚了一两秒执行。只要任务后续正常执行，就可以忽略。
+
+## 开发验证
+
+最小验证命令：
+
+```powershell
+python -m compileall src/garveyclaw
+```
+
+检查 ASR Provider：
+
+```powershell
+python -c "from garveyclaw.speech_client import build_speech_provider; print(build_speech_provider().name)"
+```
+
+查看 git 状态：
+
+```powershell
+git status --short
+```
+
+## 课程文件
+
+仓库中保留了一个课程版单文件：
+
+```text
+claw_course_bot.py
+```
+
+配套教程：
+
+```text
+COURSE_GUIDE.md
+```
+
+课程版适合学习和培训，正式运行建议使用 `src/garveyclaw/` 下的工程化版本。
