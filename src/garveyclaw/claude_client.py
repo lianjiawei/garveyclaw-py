@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import asyncio
 import logging
+from typing import Any
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -22,12 +25,12 @@ from garveyclaw.config import (
     WORKSPACE_DIR,
 )
 from garveyclaw.memory_store import append_conversation_record, load_long_term_memory
-from garveyclaw.skill_store import build_skill_prompt
 from garveyclaw.session_store import load_session_id, save_session_id
+from garveyclaw.skill_store import build_skill_prompt
 
 logger = logging.getLogger(__name__)
 
-# 所有 Agent 调用共用一把锁，避免普通消息和定时任务并发执行。
+# 所有 Agent 调用共用一把锁，避免普通消息和定时任务同时并发执行。
 AGENT_LOCK = asyncio.Lock()
 
 
@@ -36,7 +39,7 @@ class ClaudeServiceError(Exception):
 
 
 def build_system_prompt(prompt: str) -> str:
-    """构造本轮 Agent 调用使用的 system prompt。"""
+    """构造当前 Agent 调用使用的 system prompt。"""
 
     long_term_memory = load_long_term_memory()
     selected_skills, skill_prompt = build_skill_prompt(prompt)
@@ -44,15 +47,12 @@ def build_system_prompt(prompt: str) -> str:
 
     return f"""
 你现在运行在一个 Telegram 机器人中。
-
-当前工作区目录是：
-{WORKSPACE_DIR}
+当前工作区目录是：{WORKSPACE_DIR}
 
 下面是从 CLAUDE.md 读取到的长期记忆：
 {long_term_memory}
 
-本轮命中的 skill：
-{selected_skill_names}
+本轮命中的 skill：{selected_skill_names}
 
 {skill_prompt}
 
@@ -90,7 +90,12 @@ def build_tool_hooks(bot, chat_id: int) -> dict[str, list[HookMatcher]]:
     }
 
 
-async def ask_claude(prompt: str, update: Update) -> str:
+async def ask_claude(
+    prompt: str,
+    update: Update,
+    record_text: str | None = None,
+    uploaded_image: Any | None = None,
+) -> str:
     """处理来自 Telegram 的普通消息调用。"""
 
     if not update.effective_chat:
@@ -101,10 +106,19 @@ async def ask_claude(prompt: str, update: Update) -> str:
         bot=update.get_bot(),
         chat_id=update.effective_chat.id,
         continue_session=True,
+        record_text=record_text,
+        uploaded_image=uploaded_image,
     )
 
 
-async def run_agent(prompt: str, bot, chat_id: int, continue_session: bool) -> str:
+async def run_agent(
+    prompt: str,
+    bot,
+    chat_id: int,
+    continue_session: bool,
+    record_text: str | None = None,
+    uploaded_image: Any | None = None,
+) -> str:
     """运行一次 Claude Agent，并负责 session 与对话记录落盘。"""
 
     env = {
@@ -113,7 +127,7 @@ async def run_agent(prompt: str, bot, chat_id: int, continue_session: bool) -> s
         "ANTHROPIC_MODEL": ANTHROPIC_MODEL,
     }
 
-    tool_server = build_mcp_server(bot=bot, chat_id=chat_id)
+    tool_server = build_mcp_server(bot=bot, chat_id=chat_id, uploaded_image=uploaded_image)
     saved_session_id = load_session_id() if continue_session else None
     options = ClaudeAgentOptions(
         permission_mode="acceptEdits",
@@ -154,5 +168,5 @@ async def run_agent(prompt: str, bot, chat_id: int, continue_session: bool) -> s
     if latest_session_id:
         save_session_id(latest_session_id)
 
-    append_conversation_record(prompt, response, latest_session_id if continue_session else None)
+    append_conversation_record(record_text or prompt, response, latest_session_id if continue_session else None)
     return response

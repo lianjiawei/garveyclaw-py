@@ -1,5 +1,7 @@
-from datetime import datetime, timedelta, timezone
+from __future__ import annotations
+
 import logging
+from datetime import datetime, timedelta, timezone
 
 from telegram import Update
 from telegram.error import BadRequest, NetworkError, TelegramError
@@ -22,7 +24,7 @@ from garveyclaw.config import (
     TELEGRAM_READ_TIMEOUT,
     TELEGRAM_WRITE_TIMEOUT,
 )
-from garveyclaw.media_store import save_photo_message, save_voice_message
+from garveyclaw.media_store import load_photo_message, save_voice_message
 from garveyclaw.memory_store import append_long_term_memory, load_long_term_memory
 from garveyclaw.scheduler import (
     cancel_scheduled_task,
@@ -119,7 +121,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理图片消息：保存图片，并把本地路径和 caption 交给 Agent。"""
+    """处理图片消息：图片先进入内存，再直接交给 Agent。"""
 
     if not update.message:
         return
@@ -127,19 +129,25 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     try:
-        image_path = await save_photo_message(update.message)
+        photo_payload = await load_photo_message(update.message)
         caption = (update.message.caption or "").strip()
+        caption_text = caption or "无"
         prompt = (
             "用户上传了一张图片。\n"
-            f"图片本地路径：{image_path}\n"
-            f"用户附带说明：{caption or '无'}\n\n"
-            "请根据这张图片和用户说明进行分析。如果当前模型无法直接识别图片内容，"
-            "请明确说明能力边界，并基于文件路径给出下一步建议。"
+            f"用户附带说明：{caption_text}\n\n"
+            "请先调用 get_uploaded_image 工具获取本轮图片内容，"
+            "再结合图片和用户说明进行分析，并直接给出有帮助的中文回答。"
         )
-        response = await ask_claude(prompt, update)
+        record_text = f"用户上传了一张图片。说明：{caption_text}"
+        response = await ask_claude(
+            prompt=prompt,
+            update=update,
+            record_text=record_text,
+            uploaded_image=photo_payload,
+        )
         await reply_formatted_text(update, response)
     except ClaudeServiceError:
-        await reply_plain_text(update, "图片已保存，但这次调用模型服务失败了。请稍后再试一次。")
+        await reply_plain_text(update, "抱歉，这次图片分析失败了。请稍后再试一次。")
     except NetworkError:
         logger.warning("Telegram network error while handling photo", exc_info=True)
         await reply_plain_text(update, "抱歉，当前网络连接不稳定，图片处理失败。请稍后重试。")
@@ -152,7 +160,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理语音消息：保存语音，转写后交给 Agent。"""
+    """处理语音消息：先转写，再把文字内容交给 Agent。"""
 
     if not update.message:
         return
@@ -366,7 +374,7 @@ async def cancel_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """兜底记录没有被局部 handler 处理的异常。"""
 
-    logger.exception("Unhandled exception in Telegram application", exc_info=context.error)
+    logger.error("Unhandled exception in Telegram application", exc_info=context.error)
 
 
 async def post_init(application: Application) -> None:

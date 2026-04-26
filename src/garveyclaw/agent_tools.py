@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -8,7 +11,8 @@ from garveyclaw.config import WORKSPACE_DIR
 
 
 def resolve_workspace_path(relative_path: str) -> Path:
-    # 把相对路径解析到工作区，并阻止工具访问工作区之外的文件。
+    """把相对路径限制在工作区内，避免工具访问工作区之外的文件。"""
+
     candidate = (WORKSPACE_DIR / relative_path).resolve()
     workspace_root = WORKSPACE_DIR.resolve()
 
@@ -20,7 +24,6 @@ def resolve_workspace_path(relative_path: str) -> Path:
 
 @tool("get_current_time", "获取当前服务器本地时间。", {})
 async def get_current_time(_: dict[str, Any]) -> dict[str, Any]:
-    # 演示最简单的无参工具。
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return {
         "content": [
@@ -34,7 +37,6 @@ async def get_current_time(_: dict[str, Any]) -> dict[str, Any]:
 
 @tool("list_workspace_files", "列出工作区中的文件和目录。", {})
 async def list_workspace_files(_: dict[str, Any]) -> dict[str, Any]:
-    # 展示当前工作区有哪些顶层文件，方便模型先建立目录感知。
     items = sorted(path.name for path in WORKSPACE_DIR.iterdir())
     text = "\n".join(f"- {name}" for name in items) if items else "(workspace is empty)"
     return {
@@ -49,7 +51,6 @@ async def list_workspace_files(_: dict[str, Any]) -> dict[str, Any]:
 
 @tool("read_workspace_file", "读取工作区中的文本文件。", {"path": str})
 async def read_workspace_file(args: dict[str, Any]) -> dict[str, Any]:
-    # 文件读取工具只接受工作区内的相对路径。
     relative_path = args["path"]
 
     try:
@@ -83,8 +84,9 @@ async def read_workspace_file(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_mcp_server(bot: Any, chat_id: int):
-    # 这里把和当前 Telegram 会话相关的工具实例化出来。
+def build_mcp_server(bot: Any, chat_id: int, uploaded_image: Any | None = None):
+    """构造当前 Telegram 会话可用的 MCP 工具集合。"""
+
     @tool("send_message", "向当前 Telegram 会话额外发送一条消息。", {"text": str})
     async def send_message(args: dict[str, Any]) -> dict[str, Any]:
         text = args["text"]
@@ -98,13 +100,39 @@ def build_mcp_server(bot: Any, chat_id: int):
             ]
         }
 
+    @tool("get_uploaded_image", "获取本轮 Telegram 上传的图片内容。", {})
+    async def get_uploaded_image(_: dict[str, Any]) -> dict[str, Any]:
+        if uploaded_image is None:
+            return {
+                "content": [{"type": "text", "text": "No image was uploaded in this turn."}],
+                "is_error": True,
+            }
+
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "This is the image uploaded by the Telegram user in the current turn.",
+                },
+                {
+                    "type": "image",
+                    "data": base64.b64encode(uploaded_image.data).decode("ascii"),
+                    "mimeType": uploaded_image.mime_type,
+                },
+            ]
+        }
+
+    tools = [
+        get_current_time,
+        list_workspace_files,
+        read_workspace_file,
+        send_message,
+    ]
+    if uploaded_image is not None:
+        tools.append(get_uploaded_image)
+
     return create_sdk_mcp_server(
         name="garveyclaw-tools",
         version="1.0.0",
-        tools=[
-            get_current_time,
-            list_workspace_files,
-            read_workspace_file,
-            send_message,
-        ],
+        tools=tools,
     )
