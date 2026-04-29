@@ -406,6 +406,9 @@ async def post_init(application: Application) -> None:
 def build_application() -> Application:
     """创建 Telegram 应用并注册命令、消息和错误处理器。"""
 
+    if not TELEGRAM_BOT_TOKEN:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is required when starting the Telegram bot.")
+
     app = (
         Application.builder()
         .token(TELEGRAM_BOT_TOKEN)

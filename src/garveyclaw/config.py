@@ -22,6 +22,8 @@ WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR = WORKSPACE_DIR / "uploads"
 UPLOAD_VOICES_DIR = UPLOADS_DIR / "voices"
 UPLOAD_VOICES_DIR.mkdir(parents=True, exist_ok=True)
+TUI_OUTPUT_DIR = Path(os.getenv("TUI_OUTPUT_DIR", str(WORKSPACE_DIR / "outputs" / "tui"))).resolve()
+TUI_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 MEMORY_DIR = WORKSPACE_DIR / "memory"
 MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -45,8 +47,9 @@ TELEGRAM_RESTART_DELAY_SECONDS = int(os.getenv("TELEGRAM_RESTART_DELAY_SECONDS",
 ASR_PROVIDER = os.getenv("ASR_PROVIDER", "none")
 VOSK_MODEL_DIR = os.getenv("VOSK_MODEL_DIR")
 
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-OWNER_ID = int(os.environ["OWNER_ID"])
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+OWNER_ID_RAW = os.getenv("OWNER_ID")
+OWNER_ID = int(OWNER_ID_RAW) if OWNER_ID_RAW else None
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL")

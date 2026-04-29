@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
-
-from telegram import Update
+from typing import TYPE_CHECKING, Any
 
 from garveyclaw.config import AGENT_PROVIDER
 from garveyclaw.agent_response import AgentReply
+
+if TYPE_CHECKING:
+    from telegram import Update
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ def normalize_provider_name() -> str:
 
 async def ask_agent(
     prompt: str,
-    update: Update,
+    update: "Update",
     record_text: str | None = None,
     uploaded_image: Any | None = None,
 ) -> AgentReply:
@@ -47,6 +48,7 @@ async def run_agent(
     continue_session: bool,
     record_text: str | None = None,
     uploaded_image: Any | None = None,
+    session_scope: str | None = None,
 ) -> AgentReply:
     """统一 Agent 调用入口，后续可以继续扩展更多 Provider。"""
 
@@ -63,6 +65,7 @@ async def run_agent(
                 continue_session=continue_session,
                 record_text=record_text,
                 uploaded_image=uploaded_image,
+                session_scope=session_scope,
             )
             return AgentReply.from_text(text)
 

@@ -20,6 +20,7 @@ asr = [
 
 [project.scripts]
 garveyclaw = "garveyclaw.app:main"
+garveyclaw-tui = "garveyclaw.tui:main"
 
 [build-system]
 requires = ["hatchling"]

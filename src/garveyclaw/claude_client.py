@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -12,7 +12,6 @@ from claude_agent_sdk import (
     TextBlock,
     query,
 )
-from telegram import Update
 
 from garveyclaw.agent_tools import build_mcp_server
 from garveyclaw.config import (
@@ -27,6 +26,9 @@ from garveyclaw.config import (
 from garveyclaw.memory_store import append_conversation_record, load_long_term_memory
 from garveyclaw.session_store import load_session_id, save_session_id
 from garveyclaw.skill_store import build_skill_prompt
+
+if TYPE_CHECKING:
+    from telegram import Update
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +94,7 @@ def build_tool_hooks(bot, chat_id: int) -> dict[str, list[HookMatcher]]:
 
 async def ask_claude(
     prompt: str,
-    update: Update,
+    update: "Update",
     record_text: str | None = None,
     uploaded_image: Any | None = None,
 ) -> str:
@@ -118,6 +120,7 @@ async def run_agent(
     continue_session: bool,
     record_text: str | None = None,
     uploaded_image: Any | None = None,
+    session_scope: str | None = None,
 ) -> str:
     """运行一次 Claude Agent，并负责 session 与对话记录落盘。"""
 
@@ -128,7 +131,7 @@ async def run_agent(
     }
 
     tool_server = build_mcp_server(bot=bot, chat_id=chat_id, uploaded_image=uploaded_image)
-    saved_session_id = load_session_id() if continue_session else None
+    saved_session_id = load_session_id(session_scope) if continue_session else None
     options = ClaudeAgentOptions(
         permission_mode="acceptEdits",
         env=env,
@@ -166,7 +169,7 @@ async def run_agent(
         raise ClaudeServiceError("Claude service returned an empty response.")
 
     if latest_session_id:
-        save_session_id(latest_session_id)
+        save_session_id(latest_session_id, session_scope)
 
     append_conversation_record(record_text or prompt, response, latest_session_id if continue_session else None)
     return response

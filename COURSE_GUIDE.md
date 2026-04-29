@@ -1,6 +1,6 @@
 # Claw 课程版教材
 
-这份教材配套的主代码文件是 [claw_course_bot.py](/E:/AICode/AIProRepo/garveyclaw_py/claw_course_bot.py)。
+这份教材配套的主代码文件是 [claw_course_bot.py](claw_course_bot.py)。
 
 它的定位不是正式工程入口，而是一份“单文件课程版”示例，目的是把下面这些能力收拢到一起，便于学习、复习和培训：
 
@@ -50,7 +50,7 @@ conda activate garveyclaw
 
 ### 2.3 依赖安装
 
-当前项目在 [pyproject.toml](/E:/AICode/AIProRepo/garveyclaw_py/pyproject.toml) 里声明的关键依赖有：
+当前项目在 [pyproject.toml](pyproject.toml) 里声明的关键依赖有：
 
 - `python-telegram-bot>=22.6`
 - `claude-agent-sdk>=0.1.31`
@@ -108,20 +108,20 @@ python claw_course_bot.py
 
 课程版代码主文件：
 
-- [claw_course_bot.py](/E:/AICode/AIProRepo/garveyclaw_py/claw_course_bot.py)
+- [claw_course_bot.py](claw_course_bot.py)
 
 运行后会使用这些目录和文件：
 
 - 工作区目录：
-  [workspace_course](/E:/AICode/AIProRepo/garveyclaw_py/workspace_course)
+  [workspace_course](workspace_course)
 - 长期记忆文件：
-  [workspace_course/memory_course/CLAUDE.md](/E:/AICode/AIProRepo/garveyclaw_py/workspace_course/memory_course/CLAUDE.md)
+  [workspace_course/memory_course/CLAUDE.md](workspace_course/memory_course/CLAUDE.md)
 - 对话记录目录：
-  [workspace_course/memory_course/conversations](/E:/AICode/AIProRepo/garveyclaw_py/workspace_course/memory_course/conversations)
+  [workspace_course/memory_course/conversations](workspace_course/memory_course/conversations)
 - session 文件：
-  [data/course_session.json](/E:/AICode/AIProRepo/garveyclaw_py/data/course_session.json)
+  [data/course_session.json](data/course_session.json)
 - 定时任务数据库：
-  [data/course_tasks.db](/E:/AICode/AIProRepo/garveyclaw_py/data/course_tasks.db)
+  [data/course_tasks.db](data/course_tasks.db)
 
 
 ## 6. 代码模块讲解
@@ -246,7 +246,7 @@ python claw_course_bot.py
 - `save_session_id()`
 - `clear_session_id()`
 
-管理 [data/course_session.json](/E:/AICode/AIProRepo/garveyclaw_py/data/course_session.json)。
+管理 [data/course_session.json](data/course_session.json)。
 
 session 的作用是：
 
@@ -379,7 +379,7 @@ tools={"type": "preset", "preset": "claude_code"}
 
 ### 7.2 连续会话
 
-session 保存在 [data/course_session.json](/E:/AICode/AIProRepo/garveyclaw_py/data/course_session.json)。
+session 保存在 [data/course_session.json](data/course_session.json)。
 
 这样下一轮消息还能延续前文。
 
@@ -387,11 +387,11 @@ session 保存在 [data/course_session.json](/E:/AICode/AIProRepo/garveyclaw_py/
 
 长期记忆文件：
 
-- [workspace_course/memory_course/CLAUDE.md](/E:/AICode/AIProRepo/garveyclaw_py/workspace_course/memory_course/CLAUDE.md)
+- [workspace_course/memory_course/CLAUDE.md](workspace_course/memory_course/CLAUDE.md)
 
 原始对话记录：
 
-- [workspace_course/memory_course/conversations](/E:/AICode/AIProRepo/garveyclaw_py/workspace_course/memory_course/conversations)
+- [workspace_course/memory_course/conversations](workspace_course/memory_course/conversations)
 
 ### 7.4 自定义工具
 
@@ -450,7 +450,7 @@ python claw_course_bot.py
 1. `/memory`
 2. `/remember 我喜欢中文回答`
 3. 再次 `/memory`
-4. 打开 [workspace_course/memory_course/CLAUDE.md](/E:/AICode/AIProRepo/garveyclaw_py/workspace_course/memory_course/CLAUDE.md) 检查是否写入
+4. 打开 [workspace_course/memory_course/CLAUDE.md](workspace_course/memory_course/CLAUDE.md) 检查是否写入
 
 ### 8.5 单次定时任务测试
 
@@ -471,10 +471,10 @@ python claw_course_bot.py
 
 重点看这几个文件：
 
-- [data/course_session.json](/E:/AICode/AIProRepo/garveyclaw_py/data/course_session.json)
-- [data/course_tasks.db](/E:/AICode/AIProRepo/garveyclaw_py/data/course_tasks.db)
-- [workspace_course/memory_course/CLAUDE.md](/E:/AICode/AIProRepo/garveyclaw_py/workspace_course/memory_course/CLAUDE.md)
-- [workspace_course/memory_course/conversations](/E:/AICode/AIProRepo/garveyclaw_py/workspace_course/memory_course/conversations)
+- [data/course_session.json](data/course_session.json)
+- [data/course_tasks.db](data/course_tasks.db)
+- [workspace_course/memory_course/CLAUDE.md](workspace_course/memory_course/CLAUDE.md)
+- [workspace_course/memory_course/conversations](workspace_course/memory_course/conversations)
 
 
 ## 9. 课程讲解建议
@@ -527,11 +527,11 @@ python claw_course_bot.py
 
 课程版文件：
 
-- [claw_course_bot.py](/E:/AICode/AIProRepo/garveyclaw_py/claw_course_bot.py)
+- [claw_course_bot.py](claw_course_bot.py)
 
 正式工程入口：
 
-- [src/garveyclaw/app.py](/E:/AICode/AIProRepo/garveyclaw_py/src/garveyclaw/app.py)
+- [src/garveyclaw/app.py](src/garveyclaw/app.py)
 
 课程版的作用是：
 
@@ -550,8 +550,8 @@ python claw_course_bot.py
 
 如果你只看一份文件来理解这个项目，优先看：
 
-- [claw_course_bot.py](/E:/AICode/AIProRepo/garveyclaw_py/claw_course_bot.py)
+- [claw_course_bot.py](claw_course_bot.py)
 
 如果你要真正维护项目，再回到：
 
-- [src/garveyclaw](/E:/AICode/AIProRepo/garveyclaw_py/src/garveyclaw)
+- [src/garveyclaw](src/garveyclaw)
