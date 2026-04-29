@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 from datetime import datetime, timedelta, timezone
 
 from telegram import Update
@@ -14,7 +15,8 @@ from telegram.ext import (
 )
 
 from garveyclaw.access import is_owner
-from garveyclaw.claude_client import ClaudeServiceError, ask_claude
+from garveyclaw.agent_response import AgentReply
+from garveyclaw.agent_client import AgentServiceError, ask_agent
 from garveyclaw.config import (
     TELEGRAM_BOOTSTRAP_RETRIES,
     TELEGRAM_BOT_TOKEN,
@@ -71,6 +73,21 @@ async def reply_formatted_text(update: Update, text: str) -> None:
             return
 
 
+async def reply_agent_result(update: Update, reply: AgentReply) -> None:
+    """统一发送 Agent 返回结果：先发图片，再发文本说明。"""
+
+    if not update.message:
+        return
+
+    for image in reply.images:
+        image_file = BytesIO(image.data)
+        image_file.name = f"generated.{image.mime_type.removeprefix('image/')}"
+        await update.message.reply_photo(photo=image_file, caption=image.caption)
+
+    if reply.text.strip():
+        await reply_formatted_text(update, reply.text)
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理普通文本消息。"""
 
@@ -105,10 +122,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
 
-        response = await ask_claude(update.message.text, update)
-        await reply_formatted_text(update, response)
-    except ClaudeServiceError:
-        await reply_plain_text(update, "抱歉，这次调用模型服务失败了。请稍后再试一次。")
+        response = await ask_agent(update.message.text, update)
+        await reply_agent_result(update, response)
+    except AgentServiceError as exc:
+        await reply_plain_text(update, f"抱歉，这次调用模型服务失败了：{exc}")
     except NetworkError:
         logger.warning("Telegram network error while handling message", exc_info=True)
         await reply_plain_text(update, "抱歉，当前网络连接不稳定，请稍后重试。")
@@ -139,15 +156,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "再结合图片和用户说明进行分析，并直接给出有帮助的中文回答。"
         )
         record_text = f"用户上传了一张图片。说明：{caption_text}"
-        response = await ask_claude(
+        response = await ask_agent(
             prompt=prompt,
             update=update,
             record_text=record_text,
             uploaded_image=photo_payload,
         )
-        await reply_formatted_text(update, response)
-    except ClaudeServiceError:
-        await reply_plain_text(update, "抱歉，这次图片分析失败了。请稍后再试一次。")
+        await reply_agent_result(update, response)
+    except AgentServiceError as exc:
+        await reply_plain_text(update, f"抱歉，这次图片处理失败了：{exc}")
     except NetworkError:
         logger.warning("Telegram network error while handling photo", exc_info=True)
         await reply_plain_text(update, "抱歉，当前网络连接不稳定，图片处理失败。请稍后重试。")
@@ -176,13 +193,13 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"语音转写文本：{transcript}\n\n"
             "请把这条语音转写文本当作用户的真实输入来处理。"
         )
-        response = await ask_claude(prompt, update)
-        await reply_formatted_text(update, response)
+        response = await ask_agent(prompt, update)
+        await reply_agent_result(update, response)
     except SpeechRecognitionError as exc:
         logger.warning("Speech recognition failed", exc_info=True)
         await reply_plain_text(update, f"语音已保存，但语音转文字失败：{exc}")
-    except ClaudeServiceError:
-        await reply_plain_text(update, "语音已转写，但这次调用模型服务失败了。请稍后再试一次。")
+    except AgentServiceError as exc:
+        await reply_plain_text(update, f"语音已转写，但这次调用模型服务失败了：{exc}")
     except NetworkError:
         logger.warning("Telegram network error while handling voice", exc_info=True)
         await reply_plain_text(update, "抱歉，当前网络连接不稳定，语音处理失败。请稍后重试。")

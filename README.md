@@ -145,6 +145,35 @@ CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1
 CLAUDE_CODE_EFFORT_LEVEL=max
 ```
 
+### OpenAI Provider 配置
+
+项目默认仍使用 Claude Agent SDK：
+
+```env
+AGENT_PROVIDER=claude
+```
+
+如果想切换到 OpenAI SDK 第一版 Provider，可以配置：
+
+```env
+AGENT_PROVIDER=openai
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_IMAGE_API_KEY=
+OPENAI_IMAGE_BASE_URL=
+OPENAI_IMAGE_GENERATE_PATH=/images/generations
+OPENAI_IMAGE_EDIT_PATH=/images/edits
+OPENAI_IMAGE_TIMEOUT_SECONDS=120
+OPENAI_IMAGE_MODEL=gpt-image-2
+OPENAI_IMAGE_SIZE=1024x1024
+OPENAI_IMAGE_QUALITY=auto
+OPENAI_IMAGE_OUTPUT_FORMAT=png
+OPENAI_IMAGE_INCLUDE_OPTIONAL_PARAMS=0
+```
+
+第一版 OpenAI Provider 支持普通文本、图片理解和图片生成/编辑。文字聊天默认走 `OPENAI_BASE_URL`，图片生成/编辑可以单独配置 `OPENAI_IMAGE_BASE_URL`、`OPENAI_IMAGE_API_KEY` 和图片接口路径；不配置图片专用项时，会复用文本 OpenAI 配置和标准 Images API 路径。部分中转服务不接受 `quality`、`output_format`、`response_format` 等可选字段，可以保持 `OPENAI_IMAGE_INCLUDE_OPTIONAL_PARAMS=0` 只发送最小参数。向 Telegram 发送图片并附带“生成图片、改图、编辑图片”等说明时，会把返回图片直接以内存 bytes 发回 Telegram，不写入本地文件。Claude Code 内置工具、MCP 工具、文件读写、Bash、WebSearch 等复杂 Agent 能力仍建议使用 `AGENT_PROVIDER=claude`。
+
 ## 语音识别配置
 
 语音识别是可选功能。不开启时，机器人仍然可以正常处理文本和图片。
@@ -403,6 +432,12 @@ Claude Code 的 `WebSearch`、`WebFetch` 是否可用取决于当前模型服务
 
 ```powershell
 python -m compileall src/garveyclaw
+```
+
+检查文本编码，避免中文注释或 `.env` 配置说明被 Windows 终端写成问号乱码：
+
+```powershell
+python scripts/check_text_encoding.py
 ```
 
 检查 ASR Provider：

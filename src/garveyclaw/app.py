@@ -1,7 +1,9 @@
 import logging
+import time
 
-from telegram.error import TimedOut
+from telegram.error import NetworkError, TelegramError, TimedOut
 
+from garveyclaw.config import TELEGRAM_RESTART_DELAY_SECONDS
 from garveyclaw.telegram_bot import build_application, run_polling_options
 
 logger = logging.getLogger(__name__)
@@ -22,16 +24,28 @@ def main() -> None:
     logging.getLogger("telegram.ext._utils.networkloop").setLevel(logging.CRITICAL)
     logging.getLogger("telegram.ext._updater").setLevel(logging.CRITICAL)
 
-    app = build_application()
     print("Bot is running...")
-    try:
-        app.run_polling(**run_polling_options())
-    except KeyboardInterrupt:
-        print("Bot stopped.")
-    except TimedOut:
-        logger.warning("Bot startup timed out while connecting to Telegram. Please check network or proxy settings.")
-    except Exception as exc:
-        logger.warning("Bot stopped because startup failed: %s", exc.__class__.__name__)
+    while True:
+        try:
+            # 每次重连都重新构建 Application，避免复用已经关闭的事件循环或调度器。
+            app = build_application()
+            app.run_polling(**run_polling_options())
+        except KeyboardInterrupt:
+            print("Bot stopped.")
+            break
+        except (TimedOut, NetworkError, TelegramError) as exc:
+            logger.warning(
+                "Telegram polling failed: %s. Restarting in %s seconds...",
+                exc.__class__.__name__,
+                TELEGRAM_RESTART_DELAY_SECONDS,
+            )
+            time.sleep(TELEGRAM_RESTART_DELAY_SECONDS)
+        except Exception:
+            logger.exception(
+                "Bot crashed unexpectedly. Restarting in %s seconds...",
+                TELEGRAM_RESTART_DELAY_SECONDS,
+            )
+            time.sleep(TELEGRAM_RESTART_DELAY_SECONDS)
 
 
 if __name__ == "__main__":

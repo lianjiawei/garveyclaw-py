@@ -8,7 +8,7 @@ from typing import Any
 import aiosqlite
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from garveyclaw.claude_client import run_agent
+from garveyclaw.agent_client import run_agent
 from garveyclaw.config import SCHEDULER_INTERVAL_SECONDS, TASK_DB_FILE
 
 logger = logging.getLogger(__name__)
@@ -401,9 +401,9 @@ async def execute_scheduled_task(task: dict[str, Any], bot) -> None:
             chat_id=chat_id,
             continue_session=False,
         )
-        await bot.send_message(chat_id=chat_id, text=f"⏰ 定时任务执行结果：\n{result}")
+        await bot.send_message(chat_id=chat_id, text=f"⏰ 定时任务执行结果：\n{result.text}")
         next_run, next_status = compute_next_run_after_execution(task)
-        await update_task_after_run(task_id, result, next_run, next_status)
+        await update_task_after_run(task_id, result.text, next_run, next_status)
     except Exception as exc:
         logger.exception("Scheduled task failed: %s", task_id)
         error_text = f"定时任务执行失败：{exc}"
@@ -428,4 +428,3 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
         replace_existing=True,
     )
     return scheduler
-
