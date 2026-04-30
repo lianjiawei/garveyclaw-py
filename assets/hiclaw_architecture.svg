@@ -1,171 +1,172 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 920" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 960" fill="none">
   <style>
     text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
-    .h1 { font-size: 28px; font-weight: 800; fill: #0f172a; letter-spacing: -0.6px; }
-    .h2 { font-size: 15px; font-weight: 750; fill: #334155; letter-spacing: -0.1px; }
+    .h1 { font-size: 30px; font-weight: 800; fill: #0f172a; }
+    .h2 { font-size: 16px; font-weight: 750; fill: #334155; }
     .title { font-size: 15px; font-weight: 750; fill: #0f172a; }
     .sub { font-size: 11.5px; fill: #64748b; }
-    .tiny { font-size: 10px; fill: #64748b; }
-    .mono { font-size: 10px; fill: #475569; font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
+    .mono { font-size: 10.5px; fill: #475569; font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
     .pill { font-size: 10.5px; font-weight: 700; fill: #334155; }
-    .flow { font-size: 11px; font-weight: 700; fill: #64748b; letter-spacing: 0.8px; }
+    .flow { font-size: 11px; font-weight: 700; fill: #64748b; letter-spacing: 0.7px; }
   </style>
 
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1120" y2="920" gradientUnits="userSpaceOnUse">
+    <linearGradient id="bg" x1="0" y1="0" x2="1400" y2="960" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#f8fafc"/>
       <stop offset="0.55" stop-color="#eef6ff"/>
       <stop offset="1" stop-color="#f8f3ff"/>
     </linearGradient>
-    <linearGradient id="telegram" x1="66" y1="98" x2="214" y2="244" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#38bdf8"/>
-      <stop offset="1" stop-color="#2563eb"/>
-    </linearGradient>
-    <linearGradient id="agent" x1="400" y1="380" x2="720" y2="558" gradientUnits="userSpaceOnUse">
+    <linearGradient id="core" x1="480" y1="318" x2="918" y2="612" gradientUnits="userSpaceOnUse">
       <stop stop-color="#ffffff"/>
       <stop offset="1" stop-color="#f1f5f9"/>
     </linearGradient>
-    <linearGradient id="sdk" x1="795" y1="100" x2="1034" y2="286" gradientUnits="userSpaceOnUse">
+    <linearGradient id="claude" x1="1034" y1="124" x2="1310" y2="286" gradientUnits="userSpaceOnUse">
       <stop stop-color="#fb7185"/>
       <stop offset="1" stop-color="#f97316"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#0f172a" flood-opacity="0.10"/>
-    </filter>
+    <linearGradient id="openai" x1="1034" y1="334" x2="1310" y2="506" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
     <marker id="arrow" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="10" markerHeight="8" orient="auto">
-      <path d="M1 1 L9 4 L1 7" stroke="#94a3b8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M1 1 L9 4 L1 7" stroke="#94a3b8" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
     <marker id="arrow-blue" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="10" markerHeight="8" orient="auto">
-      <path d="M1 1 L9 4 L1 7" stroke="#2563eb" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M1 1 L9 4 L1 7" stroke="#2563eb" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
     <marker id="arrow-orange" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="10" markerHeight="8" orient="auto">
-      <path d="M1 1 L9 4 L1 7" stroke="#f97316" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M1 1 L9 4 L1 7" stroke="#f97316" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="10" markerHeight="8" orient="auto">
+      <path d="M1 1 L9 4 L1 7" stroke="#10b981" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
   </defs>
 
-  <rect width="1120" height="920" rx="30" fill="url(#bg)"/>
-  <circle cx="126" cy="115" r="90" fill="#38bdf8" opacity="0.10"/>
-  <circle cx="1002" cy="650" r="128" fill="#fb7185" opacity="0.08"/>
-  <circle cx="870" cy="120" r="62" fill="#f97316" opacity="0.08"/>
+  <rect width="1400" height="960" rx="28" fill="url(#bg)"/>
+  <circle cx="124" cy="112" r="94" fill="#38bdf8" opacity="0.08"/>
+  <circle cx="1260" cy="742" r="126" fill="#fb7185" opacity="0.08"/>
 
   <text x="56" y="58" class="h1">HiClaw Py Architecture</text>
-  <text x="58" y="83" class="sub">Telegram-first personal AI agent powered by Claude Agent SDK, tools, memory, schedules, skills, media, and local ASR.</text>
+  <text x="58" y="84" class="sub">Multi-channel personal agent with Claude/OpenAI routing, tools, memory, skills, media, and scheduler.</text>
 
-  <!-- Main request path -->
-  <text x="64" y="124" class="h2">User Interface</text>
-  <rect x="54" y="142" width="222" height="178" rx="24" fill="#ffffff"/>
-  <text x="82" y="182" class="title">Telegram User</text>
-  <text x="82" y="206" class="sub">Text / Photo / Voice</text>
-  <text x="82" y="228" class="sub">Commands and reminders</text>
-  <text x="82" y="250" class="sub">Media messages</text>
-  <rect x="82" y="268" width="150" height="34" rx="13" fill="#eff6ff" stroke="#bfdbfe"/>
-  <text x="106" y="290" class="pill">Owner-only access</text>
+  <text x="62" y="122" class="h2">Channels</text>
 
-  <text x="348" y="124" class="h2">Bot Layer</text>
-  <rect x="330" y="142" width="260" height="178" rx="24" fill="#ffffff"/>
-  <text x="358" y="174" class="title">telegram_bot.py</text>
-  <text x="358" y="197" class="sub">Routes messages, commands, errors</text>
-  <text x="358" y="218" class="sub">Formats Telegram-safe replies</text>
-  <text x="358" y="239" class="sub">Saves uploads and handles ASR</text>
-  <rect x="358" y="260" width="92" height="30" rx="12" fill="#f1f5f9"/>
-  <text x="376" y="279" class="mono">/reset</text>
-  <rect x="462" y="260" width="92" height="30" rx="12" fill="#f1f5f9"/>
-  <text x="480" y="279" class="mono">/skills</text>
+  <rect x="54" y="142" width="196" height="118" rx="22" fill="#ffffff"/>
+  <text x="82" y="176" class="title">Telegram</text>
+  <text x="82" y="198" class="sub">Text / Photo / Voice</text>
+  <text x="82" y="218" class="sub">Owner-only mobile channel</text>
+  <rect x="82" y="230" width="120" height="28" rx="12" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="106" y="248" class="pill">telegram_bot.py</text>
 
-  <path d="M276 230 C300 230 304 230 330 230" stroke="#2563eb" stroke-width="2.2" marker-end="url(#arrow-blue)"/>
-  <text x="284" y="219" class="flow">updates</text>
+  <rect x="270" y="142" width="196" height="118" rx="22" fill="#ffffff"/>
+  <text x="298" y="176" class="title">Feishu</text>
+  <text x="298" y="198" class="sub">Text + image input</text>
+  <text x="298" y="218" class="sub">Long WebSocket channel</text>
+  <rect x="298" y="230" width="112" height="28" rx="12" fill="#fdf2f8" stroke="#fbcfe8"/>
+  <text x="324" y="248" class="pill">feishu_bot.py</text>
 
-  <text x="458" y="366" class="h2">Agent Core</text>
-  <rect x="400" y="380" width="320" height="178" rx="28" fill="url(#agent)" stroke="#bfdbfe" stroke-width="1.4"/>
-  <rect x="422" y="402" width="120" height="34" rx="14" fill="#eff6ff" stroke="#bfdbfe"/>
-  <text x="442" y="424" class="mono" fill="#1d4ed8">Agent Core</text>
-  <text x="430" y="464" class="title">claude_client.py</text>
-  <text x="430" y="489" class="sub">Builds prompt, session, memory, tools</text>
-  <text x="430" y="511" class="sub">Runs Claude Agent SDK query stream</text>
-  <text x="430" y="533" class="sub">Parses assistant text and tool events</text>
-  <rect x="558" y="408" width="64" height="28" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="575" y="426" class="mono">hooks</text>
-  <rect x="634" y="408" width="56" height="28" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="651" y="426" class="mono">tools</text>
+  <rect x="486" y="142" width="196" height="118" rx="22" fill="#ffffff"/>
+  <text x="514" y="176" class="title">TUI</text>
+  <text x="514" y="198" class="sub">Local terminal chat</text>
+  <text x="514" y="218" class="sub">Debug / direct interaction</text>
+  <rect x="514" y="230" width="78" height="28" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="540" y="248" class="pill">tui.py</text>
 
-  <path d="M500 320 C500 348 520 356 548 380" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
-  <text x="516" y="346" class="flow">prompt</text>
+  <text x="780" y="122" class="h2">Boot Layer</text>
+  <rect x="756" y="142" width="212" height="118" rx="22" fill="#ffffff"/>
+  <text x="784" y="176" class="title">app.py</text>
+  <text x="784" y="198" class="sub">Unified startup entry</text>
+  <text x="784" y="218" class="sub">Telegram main thread + Feishu background thread</text>
 
-  <text x="830" y="124" class="h2">Claude Runtime</text>
-  <rect x="774" y="142" width="306" height="178" rx="24" fill="#ffffff"/>
-  <rect x="802" y="166" width="66" height="58" rx="18" fill="url(#sdk)"/>
-  <text x="820" y="202" class="title" fill="#ffffff">SDK</text>
-  <text x="892" y="178" class="title">Claude Agent SDK</text>
-  <text x="892" y="200" class="sub">Uses bundled Claude CLI first</text>
-  <text x="892" y="221" class="sub">Fallback: PATH claude</text>
-  <rect x="802" y="250" width="250" height="42" rx="14" fill="#fff7ed" stroke="#fed7aa"/>
-  <text x="842" y="275" class="mono">_bundled/claude.exe</text>
+  <path d="M682 202 C712 202 724 202 756 202" stroke="#2563eb" stroke-width="2.0" marker-end="url(#arrow-blue)"/>
+  <text x="696" y="190" class="flow">events</text>
 
-  <path d="M720 448 C790 448 774 250 774 230" stroke="#f97316" stroke-width="2.2" marker-end="url(#arrow-orange)"/>
-  <text x="742" y="404" class="flow">SDK stream</text>
+  <text x="512" y="318" class="h2">Agent Core</text>
+  <rect x="468" y="336" width="476" height="214" rx="28" fill="url(#core)" stroke="#bfdbfe" stroke-width="1.3"/>
+  <rect x="494" y="362" width="118" height="32" rx="12" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="516" y="382" class="pill">agent_client.py</text>
+  <text x="494" y="426" class="title">Provider Router</text>
+  <text x="494" y="448" class="sub">Selects Claude / OpenAI</text>
+  <text x="494" y="468" class="sub">Normalizes Telegram / TUI / Feishu entry</text>
+  <rect x="650" y="362" width="128" height="32" rx="12" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="672" y="382" class="pill">claude_client.py</text>
+  <rect x="816" y="362" width="118" height="32" rx="12" fill="#ecfeff" stroke="#a5f3fc"/>
+  <text x="830" y="382" class="pill">openai_client.py</text>
+  <text x="494" y="504" class="sub">Sessions, memory, tools, skills</text>
+  <text x="494" y="524" class="sub">Media and scheduler entry</text>
 
-  <rect x="820" y="380" width="244" height="178" rx="24" fill="#ffffff"/>
-  <text x="848" y="414" class="title">Model Gateway</text>
-  <text x="848" y="438" class="sub">Anthropic-compatible endpoint</text>
-  <text x="848" y="460" class="sub">DeepSeek / Qwen / Claude-like APIs</text>
-  <rect x="848" y="492" width="166" height="34" rx="13" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="870" y="514" class="mono">ANTHROPIC_BASE_URL</text>
-  <path d="M930 320 C930 348 930 350 930 380" stroke="#f97316" stroke-width="1.9" marker-end="url(#arrow-orange)"/>
+  <path d="M862 260 C862 288 844 296 804 336" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="830" y="286" class="flow">dispatch</text>
 
-  <!-- Capabilities -->
-  <text x="70" y="388" class="h2">Media Pipeline</text>
-  <rect x="54" y="406" width="274" height="152" rx="24" fill="#ffffff"/>
-  <text x="82" y="440" class="title">media_store.py</text>
-  <text x="82" y="462" class="sub">Photos saved to workspace/uploads/images</text>
-  <text x="82" y="483" class="sub">Voices saved to workspace/uploads/voices</text>
-  <text x="82" y="512" class="title">speech_client.py</text>
-  <text x="82" y="534" class="sub">ffmpeg converts audio, Vosk transcribes</text>
-  <path d="M330 482 C356 482 368 482 400 482" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="1080" y="122" class="h2">Claude Provider</text>
+  <rect x="1038" y="142" width="304" height="150" rx="22" fill="#ffffff"/>
+  <rect x="1064" y="164" width="70" height="56" rx="18" fill="url(#claude)"/>
+  <text x="1084" y="199" class="title" fill="#ffffff">SDK</text>
+  <text x="1154" y="178" class="title">Claude Agent SDK</text>
+  <text x="1154" y="200" class="sub">Bundled Claude CLI</text>
+  <text x="1154" y="220" class="sub">Claude Code tools + MCP</text>
+  <rect x="1064" y="238" width="222" height="34" rx="12" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="1096" y="260" class="mono">ANTHROPIC_BASE_URL</text>
 
-  <text x="72" y="610" class="h2">Tools</text>
-  <rect x="54" y="628" width="274" height="84" rx="22" fill="#ffffff"/>
-  <text x="82" y="658" class="title">agent_tools.py</text>
-  <text x="82" y="680" class="sub">MCP tools: time, files, send_message</text>
-  <text x="82" y="700" class="sub">Claude tools: Read, Write, WebSearch, Bash</text>
-  <path d="M328 670 C380 670 395 560 450 540" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="1080" y="332" class="h2">OpenAI Provider</text>
+  <rect x="1038" y="352" width="304" height="150" rx="22" fill="#ffffff"/>
+  <rect x="1064" y="374" width="70" height="56" rx="18" fill="url(#openai)"/>
+  <text x="1076" y="409" class="title" fill="#ffffff">API</text>
+  <text x="1154" y="388" class="title">OpenAI + Images API</text>
+  <text x="1154" y="410" class="sub">Text, vision, image generate/edit</text>
+  <rect x="1064" y="448" width="198" height="34" rx="12" fill="#ecfeff" stroke="#a5f3fc"/>
+  <text x="1092" y="470" class="mono">OPENAI_BASE_URL</text>
 
-  <text x="432" y="616" class="h2">State and Knowledge</text>
-  <rect x="400" y="628" width="320" height="84" rx="22" fill="#ffffff"/>
-  <text x="428" y="658" class="title">Local runtime state</text>
-  <text x="428" y="680" class="sub">data/session.json, data/tasks.db</text>
-  <text x="428" y="700" class="sub">workspace/memory, conversations, uploads</text>
-  <path d="M560 628 C560 600 560 586 560 558" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <path d="M944 414 C1002 414 1008 248 1028 248" stroke="#f97316" stroke-width="2.0" marker-end="url(#arrow-orange)"/>
+  <text x="948" y="380" class="flow">claude</text>
+  <path d="M918 452 C980 452 986 426 1038 426" stroke="#10b981" stroke-width="2.0" marker-end="url(#arrow-green)"/>
+  <text x="950" y="444" class="flow">openai</text>
 
-  <text x="812" y="608" class="h2">Skills</text>
-  <rect x="790" y="620" width="274" height="78" rx="22" fill="#ffffff"/>
-  <text x="818" y="651" class="title">skill_store.py</text>
-  <text x="818" y="673" class="sub">Loads table analysis skill prompts</text>
-  <text x="818" y="691" class="sub">Injected into Agent context when needed</text>
-  <path d="M790 650 C748 628 710 578 670 540" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="60" y="332" class="h2">Media</text>
+  <rect x="54" y="350" width="332" height="112" rx="22" fill="#ffffff"/>
+  <text x="82" y="382" class="title">media_store.py</text>
+  <text x="82" y="404" class="sub">Image bytes + voice uploads</text>
+  <text x="82" y="434" class="title">speech_client.py</text>
+  <text x="82" y="456" class="sub">ffmpeg + Vosk ASR</text>
+  <path d="M386 408 C420 408 432 424 468 424" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
 
-  <text x="72" y="760" class="h2">Scheduler Flow</text>
-  <rect x="54" y="774" width="1010" height="112" rx="24" fill="#ffffff"/>
-  <text x="82" y="808" class="title">scheduler.py</text>
-  <text x="82" y="832" class="sub">Create durable tasks from Telegram input.</text>
-  <text x="82" y="852" class="sub">Run due tasks through Agent Core.</text>
+  <text x="60" y="510" class="h2">Tools</text>
+  <rect x="54" y="528" width="332" height="112" rx="22" fill="#ffffff"/>
+  <text x="82" y="560" class="title">agent_tools.py</text>
+  <text x="82" y="582" class="sub">MCP tools: time / files / send_message</text>
+  <text x="82" y="602" class="sub">Claude Code tools: Read / Edit / Web / Bash</text>
+  <path d="M386 584 C430 584 442 520 494 500" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
 
-  <rect x="382" y="798" width="126" height="38" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="408" y="822" class="mono">parse</text>
-  <text x="386" y="858" class="tiny">parse_natural_schedule()</text>
-  <path d="M510 817 L536 817" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <rect x="540" y="798" width="132" height="38" rx="14" fill="#eff6ff" stroke="#bfdbfe"/>
-  <text x="578" y="822" class="mono">create</text>
-  <text x="544" y="858" class="tiny">create_scheduled_task()</text>
-  <path d="M674 817 L700 817" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <rect x="704" y="798" width="88" height="38" rx="14" fill="#fff7ed" stroke="#fed7aa"/>
-  <text x="728" y="822" class="mono">tasks.db</text>
-  <path d="M794 817 L820 817" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <rect x="824" y="798" width="104" height="38" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="852" y="822" class="mono">check</text>
-  <text x="842" y="858" class="tiny">task check</text>
-  <path d="M930 817 L956 817" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <rect x="960" y="798" width="76" height="38" rx="14" fill="#ecfdf5" stroke="#bbf7d0"/>
-  <text x="980" y="822" class="mono">run</text>
-  <text x="962" y="858" class="tiny">agent + reply</text>
-  <path d="M998 798 C940 720 792 580 676 540" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="470" y="584" class="h2">State</text>
+  <rect x="454" y="602" width="444" height="122" rx="22" fill="#ffffff"/>
+  <text x="482" y="634" class="title">config.py / session_store.py / memory_store.py</text>
+  <text x="482" y="656" class="sub">.env, workspace, outputs, uploads, skills, sessions</text>
+  <text x="482" y="678" class="sub">CLAUDE.md, memory archives, runtime data</text>
+  <path d="M676 602 C676 572 676 560 676 534" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <text x="956" y="560" class="h2">Skills</text>
+  <rect x="934" y="578" width="406" height="74" rx="22" fill="#ffffff"/>
+  <text x="962" y="610" class="title">skill_store.py</text>
+  <text x="962" y="632" class="sub">Loads local skill prompts into Claude context</text>
+  <path d="M934 614 C908 606 894 572 860 534" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <text x="62" y="770" class="h2">Scheduler</text>
+  <rect x="54" y="788" width="1286" height="84" rx="22" fill="#ffffff"/>
+  <text x="82" y="820" class="title">scheduler.py + scheduler_store.py</text>
+  <text x="82" y="842" class="sub">Telegram text → parse → create task → SQLite → check due → run agent</text>
+  <rect x="596" y="804" width="106" height="32" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="628" y="824" class="mono">parse</text>
+  <path d="M704 820 L732 820" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="736" y="804" width="118" height="32" rx="12" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="766" y="824" class="mono">create task</text>
+  <path d="M856 820 L884 820" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="888" y="804" width="100" height="32" rx="12" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="920" y="824" class="mono">SQLite</text>
+  <path d="M990 820 L1018 820" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="1022" y="804" width="110" height="32" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="1050" y="824" class="mono">check due</text>
+  <path d="M1134 820 L1162 820" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="1166" y="804" width="106" height="32" rx="12" fill="#ecfdf5" stroke="#bbf7d0"/>
+  <text x="1198" y="824" class="mono">run agent</text>
+  <path d="M1220 804 C1178 746 1032 596 850 534" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow)"/>
 </svg>
