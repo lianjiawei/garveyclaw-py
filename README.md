@@ -1,19 +1,20 @@
 # HiClaw Py
 
-HiClaw Py 是一个基于 Claude Agent SDK 和 Telegram Bot 的个人智能体项目。它把 Telegram 作为交互入口，把 Claude Code / Claude Agent SDK 作为智能体运行核心，并逐步接入工具、记忆、定时任务、图片理解、语音转文字和 Skill 能力。
+HiClaw Py 是一个基于 Telegram Bot、多通道输入和双 Provider 路由的个人智能体项目。它把 Telegram、PowerShell TUI、飞书作为交互入口，把 `agent_client.py` 作为统一路由层，在 Claude Agent SDK / Claude Code 能力和 OpenAI Provider 之间分发请求，并逐步接入工具、记忆、定时任务、图片理解、图片生成/编辑、语音转文字和 Skill 能力。
 
 这个项目适合两类用途：
 
 - 作为个人长期运行的 Telegram AI Agent。
-- 作为学习 Claude Agent SDK、MCP 工具、自定义 Agent 能力的工程样板。
+- 作为学习 Claude Agent SDK、OpenAI Provider、MCP 工具、自定义 Agent 能力的工程样板。
 
 ## 功能特性
 
 - Telegram 文本、图片、语音消息处理。
 - PowerShell TUI 本地交互通道。
 - 飞书机器人长连接文本消息通道。
-- Claude Agent SDK 模型调用。
+- Claude Agent SDK + OpenAI 双 Provider 模型调用。
 - Claude Code 内置工具显性化，例如 `Read`、`Write`、`Edit`、`Glob`、`Grep`、`WebSearch`、`WebFetch`、`Bash`。
+- OpenAI Provider 支持普通文本、图片理解、图片生成与图片编辑。
 - 自定义 MCP 工具，例如获取时间、读取工作区文件、发送 Telegram 消息。
 - Owner 权限控制，只处理指定 Telegram 用户的消息。
 - 连续会话，通过本地 `session_id` 维持上下文。
@@ -101,6 +102,11 @@ claude --version
 ## 配置
 
 项目通过 `.env` 读取运行配置。仓库只提供 `.env.example`，真实 `.env` 不应该提交到 GitHub。
+
+当前项目支持两条模型 Provider 路线：
+
+- `AGENT_PROVIDER=claude`：完整 Agent 路线，适合 Claude Code 工具、MCP、文件读写、Bash、WebSearch 等复杂能力。
+- `AGENT_PROVIDER=openai`：轻量 Provider 路线，适合普通文本、图片理解、图片生成/编辑。
 
 复制配置模板：
 
