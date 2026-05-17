@@ -27,10 +27,10 @@ from hiclaw.config import (
     OPENAI_IMAGE_QUALITY,
     OPENAI_IMAGE_SIZE,
     OPENAI_IMAGE_TIMEOUT_SECONDS,
-    OPENAI_MODEL,
     WORKSPACE_DIR,
 )
 from hiclaw.core.delivery import MessageSender
+from hiclaw.core.provider_model import get_effective_api_key, get_effective_base_url, get_effective_model
 from hiclaw.core.types import ConversationRef
 from hiclaw.memory.store import append_conversation_record, build_context_snapshot
 from hiclaw.core.locks import acquire_runtime_lock
@@ -75,18 +75,24 @@ class OpenAIImageRequestError(RuntimeError):
 def get_image_api_key() -> str:
     """图片接口可以单独配置 key；不配置时复用文本 OpenAI key。"""
 
-    api_key = OPENAI_IMAGE_API_KEY or OPENAI_API_KEY
+    api_key = OPENAI_IMAGE_API_KEY or get_effective_api_key("openai") or OPENAI_API_KEY
     if not api_key:
-        raise RuntimeError("OPENAI_IMAGE_API_KEY or OPENAI_API_KEY is not configured.")
+        raise RuntimeError(
+            "OpenAI-compatible image API key is not configured. "
+            "Run `python -m hiclaw setup`, or add a provider with `python -m hiclaw model add --protocol openai ...`."
+        )
     return api_key
 
 
 def build_image_url(path: str) -> str:
     """构造图片接口地址，兼容服务商自定义路径。"""
 
-    base_url = OPENAI_IMAGE_BASE_URL or OPENAI_BASE_URL
+    base_url = OPENAI_IMAGE_BASE_URL or get_effective_base_url("openai") or OPENAI_BASE_URL
     if not base_url:
-        raise RuntimeError("OPENAI_IMAGE_BASE_URL or OPENAI_BASE_URL is not configured.")
+        raise RuntimeError(
+            "OpenAI-compatible image base URL is not configured. "
+            "Official OpenAI users can set OPENAI_BASE_URL, and third-party providers usually provide a /v1 endpoint."
+        )
     return urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
 
 
@@ -209,10 +215,14 @@ def build_chat_messages(prompt: str, uploaded_image: Any | None) -> list[dict[st
 
 
 def build_chat_headers() -> dict[str, str]:
-    if not OPENAI_API_KEY:
-        raise RuntimeError("OPENAI_API_KEY is not configured.")
+    api_key = get_effective_api_key("openai")
+    if not api_key:
+        raise RuntimeError(
+            "OpenAI-compatible API key is not configured. "
+            "Run `python -m hiclaw setup`, or add one with `python -m hiclaw model add --protocol openai ...`."
+        )
     return {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
@@ -272,7 +282,7 @@ async def stream_chat_completion(
 ) -> Any:
     async with client.stream(
         "POST",
-        f"{OPENAI_BASE_URL.rstrip('/')}/chat/completions",
+        f"{get_effective_base_url('openai').rstrip('/')}/chat/completions",
         headers=headers,
         json=payload,
     ) as response:
@@ -408,7 +418,7 @@ async def run_openai_agent(
                 last_stream_preview: list[str] = []
                 for _ in range(3):
                     payload = {
-                        "model": OPENAI_MODEL,
+                        "model": get_effective_model("openai"),
                         "messages": messages,
                         "stream": True,
                         "tools": tools,
@@ -462,7 +472,7 @@ async def run_openai_agent(
                     # 某些中转在带 tools 时会返回空文本，但不报错。
                     # 这里退化成纯文本 chat/completions 再试一次，优先保证基础问答可用。
                     fallback_payload = {
-                        "model": OPENAI_MODEL,
+                        "model": get_effective_model("openai"),
                         "messages": messages,
                         "stream": True,
                         "temperature": 0.7,

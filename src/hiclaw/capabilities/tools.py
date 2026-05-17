@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import html
 import os
 import re
 import shutil
@@ -9,8 +10,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote_plus
 
-from tavily import TavilyClient
+import httpx
+
+try:
+    from tavily import TavilyClient
+except ImportError:
+    TavilyClient = None  # type: ignore[assignment]
 
 import hiclaw.config as config
 from hiclaw.core.confirmation import ToolConfirmationRequest, has_session_tool_grant, request_tool_confirmation
@@ -406,8 +413,8 @@ async def _handle_web_search(args: dict[str, Any], _ctx: ToolContext) -> ToolRes
     query = str(args.get("query") or "").strip()
     if not query:
         return _error_result("错误：query 不能为空。")
-    if not config.TAVILY_API_KEY:
-        return _error_result("Tavily API key is not configured. Set TAVILY_API_KEY in .env.")
+    if not config.TAVILY_API_KEY or TavilyClient is None:
+        return await _handle_default_web_search(query)
     try:
         client = TavilyClient(api_key=config.TAVILY_API_KEY)
         response = client.search(query=query, search_depth=config.TAVILY_SEARCH_DEPTH, max_results=config.TAVILY_MAX_RESULTS)
@@ -423,6 +430,46 @@ async def _handle_web_search(args: dict[str, Any], _ctx: ToolContext) -> ToolRes
         content = (result.get("content", "") or "")[:300]
         lines.append(f"{index}. {title}\n   {url}\n   {content}")
     return _text_result(f"Search results for '{query}':\n\n" + "\n\n".join(lines))
+
+
+def _clean_search_text(value: str) -> str:
+    text = re.sub(r"<[^>]+>", " ", value)
+    text = html.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+async def _handle_default_web_search(query: str) -> ToolResult:
+    search_url = f"https://duckduckgo.com/html/?q={quote_plus(query)}"
+    try:
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            response = await client.get(search_url, headers={"User-Agent": "Mozilla/5.0"})
+            response.raise_for_status()
+    except Exception as exc:
+        return _error_result(
+            "默认搜索暂时不可用。你可以配置 TAVILY_API_KEY 获得更稳定的联网搜索能力。"
+            f"\nDetails: {exc}"
+        )
+
+    matches = re.findall(
+        r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>.*?<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
+        response.text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    lines = [
+        "搜索来源：系统默认轻量搜索（未配置 Tavily）。",
+        "提示：默认搜索可能在结果质量、时效性和访问频率上受限制；需要更稳定效果建议配置 TAVILY_API_KEY。",
+        "",
+    ]
+    max_results = max(1, min(config.TAVILY_MAX_RESULTS, 5))
+    for index, (url, title, snippet) in enumerate(matches[:max_results], 1):
+        lines.append(f"{index}. {_clean_search_text(title)}")
+        lines.append(f"   URL: {html.unescape(url)}")
+        clean_snippet = _clean_search_text(snippet)
+        if clean_snippet:
+            lines.append(f"   {clean_snippet}")
+    if len(lines) <= 3:
+        lines.append("默认搜索没有返回可用结果。")
+    return _text_result("\n".join(lines))
 
 
 async def _handle_send_message(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
@@ -835,7 +882,7 @@ def _build_default_registry() -> ToolRegistry:
     registry.register(ToolSpec("glob_workspace_files", "按 glob 模式查找工作区文件。", _schema({"pattern": {"type": "string", "description": "glob 模式，例如 src/**/*.py"}}, ["pattern"]), _handle_glob_workspace_files, providers=frozenset({"openai", "claude"}), summary_builder=_tool_name_summary("pattern"), category="workspace"))
     registry.register(ToolSpec("grep_workspace_content", "按正则在工作区文件内容中搜索。", _schema({"pattern": {"type": "string", "description": "正则表达式"}, "include": {"type": "string", "description": "可选 glob 文件过滤，例如 *.py"}}, ["pattern"]), _handle_grep_workspace_content, providers=frozenset({"openai", "claude"}), summary_builder=_tool_name_summary("pattern"), category="workspace"))
     registry.register(ToolSpec("bash", "执行 PowerShell 命令，适合多步骤文件操作和自动化任务。", _schema({"command": {"type": "string", "description": "要执行的 PowerShell 命令"}, "workdir": {"type": "string", "description": "可选工作目录，相对于工作区"}, "timeout": {"type": "integer", "description": "超时时间（秒），默认 60"}}, ["command"]), _handle_bash, providers=frozenset({"openai", "claude"}), summary_builder=_tool_command_summary, risk_level="execute", category="workspace", confirmation=_confirm("请确认是否执行 PowerShell 命令：{summary}")))
-    registry.register(ToolSpec("web_search", "使用 Tavily 搜索互联网信息，返回结果摘要和 URL。", _schema({"query": {"type": "string", "description": "搜索关键词"}}, ["query"]), _handle_web_search, summary_builder=_tool_name_summary("query"), category="research"))
+    registry.register(ToolSpec("web_search", "搜索互联网信息。优先使用 Tavily；未配置 Tavily 时回退到系统默认轻量搜索，能力可能受限。", _schema({"query": {"type": "string", "description": "搜索关键词"}}, ["query"]), _handle_web_search, summary_builder=_tool_name_summary("query"), category="research"))
     registry.register(ToolSpec("send_message", "向当前会话额外发送一条消息。", _schema({"text": {"type": "string", "description": "消息内容"}}, ["text"]), _handle_send_message, summary_builder=_tool_name_summary("text"), risk_level="external", category="communication", confirmation=_confirm("请确认是否发送消息：{summary}")))
     registry.register(ToolSpec("send_file", "向当前会话发送工作区中的一个文件。参数 path 是文件在工作区中的路径。", _schema({"path": {"type": "string", "description": "工作区中的文件路径"}}, ["path"]), _handle_send_file, summary_builder=_tool_name_summary("path"), risk_level="external", category="communication", confirmation=_confirm("请确认是否发送文件：{summary}")))
     registry.register(ToolSpec("get_uploaded_image", "获取本轮上传的图片内容。", _schema({}), _handle_get_uploaded_image, providers=frozenset({"claude"}), availability=_uploaded_image_available, category="media"))

@@ -7,7 +7,19 @@ import time
 from collections import deque
 
 from hiclaw.config import PROJECT_ROOT
-from hiclaw.setup import build_parser, load_env_values, run_config_get, run_config_set, run_doctor, run_setup, validate_env
+from hiclaw.setup import (
+    build_parser,
+    load_env_values,
+    run_config_get,
+    run_config_set,
+    run_doctor,
+    run_channel_setup,
+    run_model_add,
+    run_model_list,
+    run_model_use,
+    run_setup,
+    validate_env,
+)
 
 
 PID_FILE = PROJECT_ROOT / "data" / "hiclaw.pid"
@@ -134,6 +146,18 @@ def main(argv: list[str] | None = None) -> int:
         if args.config_command == "get":
             return run_config_get(args.keys, show_secrets=args.show_secrets)
         parser.error("config 需要子命令：set 或 get")
+    if args.command == "model":
+        if args.model_command in {None, "list"}:
+            return run_model_list(args)
+        if args.model_command == "add":
+            return run_model_add(args)
+        if args.model_command == "use":
+            return run_model_use(args)
+        parser.error("model 需要子命令：list、add 或 use")
+    if args.command == "channel":
+        if args.channel_command == "setup":
+            return run_channel_setup(args)
+        parser.error("channel 需要子命令：setup")
     if args.command == "run":
         _print_startup_preflight_error()
         from hiclaw.app import main as run_app

@@ -34,13 +34,11 @@ def main() -> None:
     logging.getLogger("telegram.ext._updater").setLevel(logging.CRITICAL)
 
     available_channels = [channel for channel in get_registered_channels() if channel.enabled()]
-    if not available_channels:
-        raise RuntimeError(
-            "Neither TELEGRAM_BOT_TOKEN nor FEISHU_APP_ID/FEISHU_APP_SECRET is configured. "
-            "Run `python -m hiclaw setup` to configure a channel, or run `hiclaw-tui` for a local console."
-        )
-
-    print(f"Starting channels: {', '.join(channel.name for channel in available_channels)}")
+    if available_channels:
+        print(f"Starting channels: {', '.join(channel.name for channel in available_channels)}")
+    else:
+        print("No Telegram / Feishu channel configured. Starting dashboard-only mode.")
+        print("For local chat, run: hiclaw-tui")
 
     _bootstrap_runtime_state()
 
@@ -91,6 +89,13 @@ def main() -> None:
                         thread.join(timeout=0.5)
             except KeyboardInterrupt:
                 print("Bot stopped.")
+        else:
+            print("Dashboard-only mode is running. Press Ctrl+C to stop.")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("HiClaw stopped.")
     finally:
         stop_background_capability_watcher(capability_watcher)
         stop_background_scheduler(scheduler_runtime)

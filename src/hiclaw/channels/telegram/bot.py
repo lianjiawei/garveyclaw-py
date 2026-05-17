@@ -62,7 +62,9 @@ from hiclaw.memory.session import clear_session_id
 from hiclaw.skills.store import get_skill, list_skills
 from hiclaw.media.speech import SpeechRecognitionError, transcribe_voice
 from hiclaw.channels.telegram.formatting import format_telegram_text
-from hiclaw.core.provider_state import get_provider, set_provider
+from hiclaw.core.model_profiles import render_model_profiles, set_active_model_profile
+from hiclaw.core.provider_model import get_effective_model, get_provider_mode_label
+from hiclaw.core.provider_state import get_provider
 from hiclaw.decision.render import render_decision_plan_debug
 from hiclaw.decision.router import build_decision_plan
 
@@ -257,11 +259,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     resolve_pending_confirmation(update.effective_chat.id, approved)
                     await reply_plain_text(update, "已确认，继续执行。" if approved else "已取消本次工具操作。")
             return
-        if lower_text in {"/claude", "/openai"}:
-            provider = set_provider(lower_text.removeprefix("/"))
-            await reply_plain_text(update, f"已切换到 {provider}。")
-            return
-
         if update.effective_chat is not None:
             task_result = await handle_task_command(build_telegram_conversation(update), text)
             if task_result.handled:
@@ -778,29 +775,44 @@ async def cancel_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await reply_plain_text(update, task_result.message)
 
 
-async def switch_provider(update: Update, context: ContextTypes.DEFAULT_TYPE, provider: str) -> None:
-    if not update.message:
-        return
-    if not is_owner(update):
-        return
-    current = set_provider(provider)
-    await reply_plain_text(update, f"已切换到 {current}。")
-
-
-async def switch_to_claude(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await switch_provider(update, context, "claude")
-
-
-async def switch_to_openai(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await switch_provider(update, context, "openai")
-
-
 async def show_provider(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
     if not is_owner(update):
         return
-    await reply_plain_text(update, f"当前 Provider: {get_provider()}")
+    provider = get_provider()
+    await reply_plain_text(
+        update,
+        "\n".join(
+            [
+                f"当前 Provider: {provider}",
+                f"接口类型: {get_provider_mode_label(provider)}",
+                f"当前模型: {get_effective_model(provider) or '(empty)'}",
+            ]
+        ),
+    )
+
+
+async def handle_model(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    if not is_owner(update):
+        return
+    provider = get_provider()
+    if not context.args:
+        await reply_plain_text(update, render_model_profiles())
+        return
+    if context.args[0].lower() != "use" or len(context.args) < 2:
+        await reply_plain_text(update, "用法: /model use <profile_id> [model]")
+        return
+    profile_id = context.args[1].strip()
+    model = " ".join(context.args[2:]).strip() or None
+    try:
+        profile = set_active_model_profile(profile_id, model)
+    except ValueError as exc:
+        await reply_plain_text(update, str(exc))
+        return
+    await reply_plain_text(update, f"已切换到 {profile.id}\n当前模型: {profile.model or '(empty)'}")
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -827,8 +839,7 @@ async def post_init(application: Application) -> None:
         BotCommand("remember", "写入候选记忆"),
         BotCommand("reset", "清空当前会话"),
         BotCommand("provider", "查看当前模型"),
-        BotCommand("claude", "切换到 Claude"),
-        BotCommand("openai", "切换到 OpenAI"),
+        BotCommand("model", "查看或切换模型 Provider"),
         BotCommand("schedule_in", "创建定时任务"),
         BotCommand("tasks", "列出定时任务"),
         BotCommand("cancel", "取消定时任务"),
@@ -871,8 +882,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("revoke", revoke_grant))
     app.add_handler(CommandHandler("reset", reset_session))
     app.add_handler(CommandHandler("provider", show_provider))
-    app.add_handler(CommandHandler("claude", switch_to_claude))
-    app.add_handler(CommandHandler("openai", switch_to_openai))
+    app.add_handler(CommandHandler("model", handle_model))
     app.add_handler(CommandHandler("schedule_in", schedule_in))
     app.add_handler(CommandHandler("tasks", list_tasks))
     app.add_handler(CommandHandler("cancel", cancel_task))

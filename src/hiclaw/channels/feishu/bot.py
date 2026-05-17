@@ -51,7 +51,9 @@ from hiclaw.config import (
     SHOW_TOOL_TRACE,
 )
 from hiclaw.channels.feishu.formatting import markdown_to_lark_md
-from hiclaw.core.provider_state import get_provider, set_provider
+from hiclaw.core.model_profiles import render_model_profiles, set_active_model_profile
+from hiclaw.core.provider_model import get_effective_model, get_provider_mode_label
+from hiclaw.core.provider_state import get_provider
 from hiclaw.decision.render import render_decision_plan_debug
 from hiclaw.decision.router import build_decision_plan
 from hiclaw.media.speech import SpeechRecognitionError, transcribe_voice
@@ -484,12 +486,35 @@ async def handle_message(client: lark.Client, incoming: FeishuIncomingMessage) -
                 resolve_pending_confirmation(incoming.chat_id, approved)
                 await send_text_message(client, incoming.chat_id, "已确认，继续执行。" if approved else "已取消本次工具操作。")
         return
-    if lower_text in {"/claude", "/openai", "/provider"}:
-        if lower_text == "/provider":
-            await send_text_message(client, incoming.chat_id, f"当前 Provider: {get_provider()}")
+    if lower_text == "/provider":
+        provider = get_provider()
+        await send_text_message(
+            client,
+            incoming.chat_id,
+            "\n".join(
+                [
+                    f"当前 Provider: {provider}",
+                    f"接口类型: {get_provider_mode_label(provider)}",
+                    f"当前模型: {get_effective_model(provider) or '(empty)'}",
+                ]
+            ),
+        )
+        return
+    if lower_text.startswith("/model"):
+        args = incoming.text.strip().split(maxsplit=1)
+        if len(args) == 1:
+            await send_text_message(client, incoming.chat_id, render_model_profiles())
         else:
-            provider = set_provider(lower_text.removeprefix("/"))
-            await send_text_message(client, incoming.chat_id, f"已切换到 {provider}。")
+            parts = args[1].strip().split()
+            if not parts or parts[0].lower() != "use" or len(parts) < 2:
+                await send_text_message(client, incoming.chat_id, "用法: /model use <profile_id> [model]")
+                return
+            try:
+                profile = set_active_model_profile(parts[1], " ".join(parts[2:]) if len(parts) > 2 else None)
+            except ValueError as exc:
+                await send_text_message(client, incoming.chat_id, str(exc))
+                return
+            await send_text_message(client, incoming.chat_id, f"已切换到 {profile.id}\n当前模型: {profile.model or '(empty)'}")
         return
 
     if lower_text == "/start":

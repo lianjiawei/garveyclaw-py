@@ -33,7 +33,9 @@ from hiclaw.core.confirmation import (
 )
 from hiclaw.core.response import AgentReply
 from hiclaw.config import PROJECT_ROOT, SHOW_TOOL_TRACE, TUI_OUTPUT_DIR, WORKSPACE_DIR
-from hiclaw.core.provider_state import get_provider, set_provider
+from hiclaw.core.model_profiles import render_model_profiles, set_active_model_profile
+from hiclaw.core.provider_model import get_effective_model, get_provider_mode_label
+from hiclaw.core.provider_state import get_provider
 from hiclaw.core.delivery import DeliveryRouter
 from hiclaw.decision.render import render_decision_plan_debug
 from hiclaw.decision.router import build_decision_plan
@@ -122,8 +124,7 @@ COMMANDS = [
     CommandInfo("/retry", "重发上一条用户输入"),
     CommandInfo("/reset", "清空 TUI 独立连续会话"),
     CommandInfo("/provider", "查看当前 Agent Provider"),
-    CommandInfo("/claude", "切换到 Claude Provider"),
-    CommandInfo("/openai", "切换到 OpenAI Provider"),
+    CommandInfo("/model", "查看或切换模型 Provider"),
     CommandInfo("/schedule_in", "创建单次定时任务"),
     CommandInfo("/tasks", "查看当前 TUI 定时任务"),
     CommandInfo("/cancel", "取消指定定时任务"),
@@ -465,6 +466,8 @@ def print_help() -> None:
         "/retry      重发上一条用户输入",
         "/reset      清空当前连续会话",
         "/provider   查看当前 Provider",
+        "/model      按 OpenAI-compatible / Anthropic-compatible 分组查看模型",
+        "/model use ID [模型名]    切换模型 Provider，可顺手覆盖模型名",
         "/plan 文本   查看请求路由计划",
         "/grants     查看本会话工具授权",
         "/revoke 名   撤销某个工具授权",
@@ -703,11 +706,31 @@ async def run_tui() -> None:
                 prompt = state.last_user_input
             if command == "/provider":
                 state.provider = get_provider()
-                print_message_block("Provider", f"当前 Provider: {state.provider}", subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
+                text = "\n".join(
+                    [
+                        f"当前 Provider: {state.provider}",
+                        f"接口类型: {get_provider_mode_label(state.provider)}",
+                        f"当前模型: {get_effective_model(state.provider) or '(empty)'}",
+                    ]
+                )
+                print_message_block("Provider", text, subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
                 continue
-            if command in {"/claude", "/openai"}:
-                state.provider = set_provider(command.removeprefix("/"))
-                print_message_block("Provider", f"已切换到 {state.provider}", subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
+            if command.startswith("/model"):
+                parts = prompt.split(maxsplit=1)
+                if len(parts) == 1:
+                    print_message_block("Model", render_model_profiles(), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
+                    continue
+                args = parts[1].strip().split()
+                if not args or args[0].lower() != "use" or len(args) < 2:
+                    print_message_block("Model", "用法: /model use <profile_id> [model]", subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_MUTED)
+                    continue
+                try:
+                    profile = set_active_model_profile(args[1], " ".join(args[2:]) if len(args) > 2 else None)
+                except ValueError as exc:
+                    print_message_block("Model", str(exc), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_MUTED)
+                    continue
+                state.provider = profile.protocol
+                print_message_block("Model", f"已切换到 {profile.id}\n当前模型: {profile.model or '(empty)'}", subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
                 continue
             if command == "/reset":
                 clear_session_id(state.session_scope)

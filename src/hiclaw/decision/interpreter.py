@@ -10,14 +10,13 @@ import httpx
 from hiclaw.config import (
     ANTHROPIC_API_KEY,
     ANTHROPIC_BASE_URL,
-    ANTHROPIC_MODEL,
     DECISION_INTERPRETER_MAX_PROMPT_CHARS,
     DECISION_INTERPRETER_MODE,
     DECISION_INTERPRETER_TIMEOUT_SECONDS,
     OPENAI_API_KEY,
     OPENAI_BASE_URL,
-    OPENAI_MODEL,
 )
+from hiclaw.core.provider_model import get_effective_api_key, get_effective_base_url, get_effective_model
 from hiclaw.decision.models import TaskIntent
 from hiclaw.decision.store import load_session_task_line, load_session_user_constraints
 from hiclaw.memory.store import load_session_summary, load_working_state
@@ -369,9 +368,9 @@ def _should_use_model(prompt: str, provider: str) -> bool:
     mode = DECISION_INTERPRETER_MODE
     if mode == "heuristic":
         return False
-    if provider == "openai" and not OPENAI_API_KEY:
+    if provider == "openai" and not get_effective_api_key("openai"):
         return False
-    if provider == "claude" and not ANTHROPIC_API_KEY:
+    if provider == "claude" and not get_effective_api_key("claude"):
         return False
     text = prompt.strip()
     if mode == "model":
@@ -487,10 +486,12 @@ def _strip_json_fence(text: str) -> str:
 
 
 async def _interpret_with_openai(prompt: str, fallback: TaskIntent) -> TaskIntent | None:
-    if not OPENAI_API_KEY or not OPENAI_BASE_URL:
+    api_key = get_effective_api_key("openai")
+    base_url = get_effective_base_url("openai")
+    if not api_key or not base_url:
         return None
     payload = {
-        "model": OPENAI_MODEL,
+        "model": get_effective_model("openai"),
         "messages": [
             {"role": "system", "content": "你是任务意图解释器，只返回 JSON。"},
             {"role": "user", "content": _build_interpreter_prompt(prompt, fallback.context_summary)},
@@ -498,8 +499,8 @@ async def _interpret_with_openai(prompt: str, fallback: TaskIntent) -> TaskInten
         "temperature": 0,
         "response_format": {"type": "json_object"},
     }
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
-    url = urljoin(OPENAI_BASE_URL.rstrip("/") + "/", "chat/completions")
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    url = urljoin(base_url.rstrip("/") + "/", "chat/completions")
     async with httpx.AsyncClient(timeout=DECISION_INTERPRETER_TIMEOUT_SECONDS) as client:
         response = await client.post(url, headers=headers, json=payload)
         response.raise_for_status()
@@ -514,16 +515,17 @@ async def _interpret_with_openai(prompt: str, fallback: TaskIntent) -> TaskInten
 
 
 async def _interpret_with_claude(prompt: str, fallback: TaskIntent) -> TaskIntent | None:
-    if not ANTHROPIC_API_KEY:
+    api_key = get_effective_api_key("claude")
+    if not api_key:
         return None
     from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, query
 
     options = ClaudeAgentOptions(
         permission_mode="acceptEdits",
         env={
-            "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
-            "ANTHROPIC_BASE_URL": ANTHROPIC_BASE_URL,
-            "ANTHROPIC_MODEL": ANTHROPIC_MODEL,
+            "ANTHROPIC_API_KEY": api_key,
+            "ANTHROPIC_BASE_URL": get_effective_base_url("claude"),
+            "ANTHROPIC_MODEL": get_effective_model("claude"),
         },
         cwd=".",
         tools=[],

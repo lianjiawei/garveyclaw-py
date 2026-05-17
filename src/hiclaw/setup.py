@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Iterable
 
 from hiclaw.config import PROJECT_ROOT
+from hiclaw.core.model_profiles import ModelProfile, get_active_model_profile, render_model_profiles, set_active_model_profile, upsert_model_profile
+from hiclaw.core.provider_state import normalize_provider
 
 ENV_FILE = PROJECT_ROOT / ".env"
 ENV_EXAMPLE_FILE = PROJECT_ROOT / ".env.example"
@@ -23,6 +25,7 @@ PLACEHOLDER_MARKERS = (
 )
 
 DEFAULTS: dict[str, str] = {
+    "AGENT_ROUTE": "openai",
     "AGENT_PROVIDER": "openai",
     "OPENAI_MODEL": "gpt-4o-mini",
     "HICLAW_DASHBOARD_HOST": "127.0.0.1",
@@ -198,13 +201,29 @@ def validate_env(values: dict[str, str] | None = None, *, require_channel: bool 
         )
         return issues
 
-    provider = (_value(values, "AGENT_PROVIDER") or DEFAULTS["AGENT_PROVIDER"]).lower()
+    provider = normalize_provider(_value(values, "AGENT_ROUTE") or _value(values, "AGENT_PROVIDER") or DEFAULTS["AGENT_PROVIDER"], default=DEFAULTS["AGENT_PROVIDER"])
+    active_profile = get_active_model_profile()
+    if active_profile.api_key or active_profile.base_url or active_profile.model:
+        provider = active_profile.protocol
     if provider not in {"claude", "openai"}:
-        issues.append(ConfigIssue("error", "invalid_provider", "AGENT_PROVIDER 只能是 claude 或 openai。", "运行 `python -m hiclaw config set AGENT_PROVIDER=openai`。"))
-    elif provider == "openai" and not _has_value(values, "OPENAI_API_KEY"):
-        issues.append(ConfigIssue("error", "missing_openai_key", "当前 Provider 是 openai，但 OPENAI_API_KEY 未配置。", "在 .env 中设置 OPENAI_API_KEY，或运行 `python -m hiclaw setup`。"))
-    elif provider == "claude" and not _has_value(values, "ANTHROPIC_API_KEY"):
-        issues.append(ConfigIssue("error", "missing_claude_key", "当前 Provider 是 claude，但 ANTHROPIC_API_KEY 未配置。", "在 .env 中设置 ANTHROPIC_API_KEY，或切换 `AGENT_PROVIDER=openai`。"))
+        issues.append(
+            ConfigIssue(
+                "error",
+                "invalid_provider",
+                "AGENT_ROUTE 无效。可用值：openai/openai_compatible/claude/anthropic_compatible。",
+                "运行 `python -m hiclaw config set AGENT_ROUTE=openai`。",
+            )
+        )
+    provider_key_ready = bool(active_profile.api_key) and active_profile.protocol == provider
+    provider_model_ready = bool(active_profile.model) and active_profile.protocol == provider
+    if provider == "openai" and not (_has_value(values, "OPENAI_API_KEY") or provider_key_ready):
+        issues.append(ConfigIssue("warning", "missing_openai_key", "当前模型 Provider 是 OpenAI-compatible，但 API Key 未配置；模型对话暂不可用。", "运行 `python -m hiclaw setup`，或用 `python -m hiclaw model add --protocol openai ...` 添加。"))
+    elif provider == "claude" and not (_has_value(values, "ANTHROPIC_API_KEY") or provider_key_ready):
+        issues.append(ConfigIssue("warning", "missing_claude_key", "当前模型 Provider 是 Anthropic-compatible，但 API Key 未配置；模型对话暂不可用。", "运行 `python -m hiclaw setup`，或用 `python -m hiclaw model add --protocol claude ...` 添加。"))
+    if provider == "openai" and not (_has_value(values, "OPENAI_MODEL") or provider_model_ready):
+        issues.append(ConfigIssue("warning", "missing_openai_model", "OPENAI_MODEL 为空，将由服务端默认模型决定。", "建议显式填写 OPENAI_MODEL，降低兼容服务商行为差异。"))
+    if provider == "claude" and not (_has_value(values, "ANTHROPIC_MODEL") or provider_model_ready):
+        issues.append(ConfigIssue("warning", "missing_anthropic_model", "ANTHROPIC_MODEL 为空，将由服务端默认模型决定。", "建议显式填写 ANTHROPIC_MODEL，便于复现与排障。"))
 
     openai_base_url = _value(values, "OPENAI_BASE_URL")
     if openai_base_url and _looks_like_placeholder(openai_base_url):
@@ -221,10 +240,10 @@ def validate_env(values: dict[str, str] | None = None, *, require_channel: bool 
     if require_channel and not telegram_ready and not feishu_ready:
         issues.append(
             ConfigIssue(
-                "error",
+                "warning",
                 "missing_channel",
-                "没有可用消息通道：需要配置 Telegram 或 Feishu。",
-                "Telegram 设置 TELEGRAM_BOT_TOKEN 和 OWNER_ID；Feishu 设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET。只想本地调试可运行 `hiclaw-tui`。",
+                "未配置 Telegram / Feishu 消息通道；主程序会以 dashboard-only 模式启动。",
+                "想本地聊天请运行 `hiclaw-tui`；想接入机器人再配置 Telegram 或 Feishu。",
             )
         )
 
@@ -253,8 +272,8 @@ def validate_env(values: dict[str, str] | None = None, *, require_channel: bool 
             ConfigIssue(
                 "warning",
                 "missing_tavily_key",
-                "TAVILY_API_KEY 未配置，默认联网搜索工具会不可用。",
-                "如果你希望默认可用联网搜索，请在 .env 中设置 TAVILY_API_KEY，或运行 `python -m hiclaw setup`。",
+                "TAVILY_API_KEY 未配置；web_search 会回退到系统默认轻量搜索。",
+                "默认搜索能力可能在质量、时效性和访问频率上受限制；需要更稳定效果时再配置 TAVILY_API_KEY。",
             )
         )
     elif any(marker in tavily.lower() for marker in PLACEHOLDER_MARKERS):
@@ -310,16 +329,28 @@ def run_setup(args: argparse.Namespace) -> int:
     print(f"- 配置文件: {ENV_FILE}")
     if created:
         print("- 已根据 .env.example 创建 .env")
+    print("")
+    print("第一步：配置模型 Provider")
+    print("这里选择的是接口协议，不是只能用官方模型。")
+    print("- OpenAI-compatible：OpenAI 官方、DeepSeek、通义千问、硅基流动等兼容 /v1/chat/completions 的服务")
+    print("- Anthropic-compatible：Anthropic 官方或 Claude/Anthropic 兼容网关")
 
-    provider_default = args.provider or _value(values, "AGENT_PROVIDER") or DEFAULTS["AGENT_PROVIDER"]
-    provider = provider_default.lower()
+    provider_default = args.provider or _value(values, "AGENT_ROUTE") or _value(values, "AGENT_PROVIDER") or DEFAULTS["AGENT_ROUTE"]
+    provider = normalize_provider(provider_default, default=DEFAULTS["AGENT_PROVIDER"])
     if provider not in {"claude", "openai"}:
-        provider = DEFAULTS["AGENT_PROVIDER"]
+        provider = normalize_provider(DEFAULTS["AGENT_PROVIDER"], default="openai")
     if not args.non_interactive:
-        provider = _prompt("选择模型 Provider (openai/claude)", provider).lower()
+        provider = normalize_provider(
+            _prompt("选择接口协议 (openai_compatible/anthropic_compatible)", provider),
+            default=provider,
+        )
     updates["AGENT_PROVIDER"] = provider
+    updates["AGENT_ROUTE"] = provider
 
     if provider == "openai":
+        profile_name = getattr(args, "profile_name", None) or _value(values, "MODEL_PROFILE_NAME") or "openai-default"
+        if not args.non_interactive:
+            profile_name = _prompt("给这个模型服务起个名字，例如 deepseek、qwen、openai-main", profile_name)
         key = args.openai_api_key or _value(values, "OPENAI_API_KEY")
         if not args.non_interactive:
             key = _prompt("OPENAI_API_KEY", "" if not _has_value(values, "OPENAI_API_KEY") else key, secret=True)
@@ -327,10 +358,26 @@ def run_setup(args: argparse.Namespace) -> int:
             updates["OPENAI_API_KEY"] = key
         base_url = args.openai_base_url if args.openai_base_url is not None else _value(values, "OPENAI_BASE_URL")
         if not args.non_interactive:
-            base_url = _prompt("OPENAI_BASE_URL (可选，兼容服务商填写)", base_url if _has_value(values, "OPENAI_BASE_URL") else "")
+            base_url = _prompt("OPENAI_BASE_URL（官方 OpenAI 可留空；第三方兼容服务通常填写 /v1 地址）", base_url if _has_value(values, "OPENAI_BASE_URL") else "")
         updates["OPENAI_BASE_URL"] = base_url
-        updates["OPENAI_MODEL"] = args.openai_model or _value(values, "OPENAI_MODEL") or DEFAULTS["OPENAI_MODEL"]
+        model = args.openai_model or _value(values, "OPENAI_MODEL") or DEFAULTS["OPENAI_MODEL"]
+        if not args.non_interactive:
+            model = _prompt("模型名（填写服务商给你的 model id，例如 gpt-4o-mini、deepseek-chat、qwen-plus）", model)
+        updates["OPENAI_MODEL"] = model
+        upsert_model_profile(
+            ModelProfile(
+                id=profile_name.strip() or "openai-default",
+                name=profile_name.strip() or "OpenAI compatible",
+                protocol="openai",
+                api_key=key or "",
+                base_url=base_url or "",
+                model=model or "",
+            )
+        )
     else:
+        profile_name = getattr(args, "profile_name", None) or _value(values, "MODEL_PROFILE_NAME") or "claude-default"
+        if not args.non_interactive:
+            profile_name = _prompt("给这个模型服务起个名字，例如 claude、qwen-anthropic、my-gateway", profile_name)
         key = args.anthropic_api_key or _value(values, "ANTHROPIC_API_KEY")
         if not args.non_interactive:
             key = _prompt("ANTHROPIC_API_KEY", "" if not _has_value(values, "ANTHROPIC_API_KEY") else key, secret=True)
@@ -338,17 +385,31 @@ def run_setup(args: argparse.Namespace) -> int:
             updates["ANTHROPIC_API_KEY"] = key
         base_url = args.anthropic_base_url if args.anthropic_base_url is not None else _value(values, "ANTHROPIC_BASE_URL")
         if not args.non_interactive:
-            base_url = _prompt("ANTHROPIC_BASE_URL (可选，代理/兼容端点填写)", base_url if _has_value(values, "ANTHROPIC_BASE_URL") else "")
+            base_url = _prompt("ANTHROPIC_BASE_URL（官方 Anthropic 可留空；第三方兼容网关请填写）", base_url if _has_value(values, "ANTHROPIC_BASE_URL") else "")
         updates["ANTHROPIC_BASE_URL"] = base_url
         model = args.anthropic_model or _value(values, "ANTHROPIC_MODEL")
         if not args.non_interactive:
-            model = _prompt("ANTHROPIC_MODEL (可选)", model if _has_value(values, "ANTHROPIC_MODEL") else "")
+            model = _prompt("模型名（填写服务商给你的 model id）", model if _has_value(values, "ANTHROPIC_MODEL") else "")
         updates["ANTHROPIC_MODEL"] = model
+        upsert_model_profile(
+            ModelProfile(
+                id=profile_name.strip() or "claude-default",
+                name=profile_name.strip() or "Anthropic compatible",
+                protocol="claude",
+                api_key=key or "",
+                base_url=base_url or "",
+                model=model or "",
+            )
+        )
 
     channel = args.channel
+    print("")
+    print("第二步：选择使用入口")
     if not channel and not args.non_interactive:
-        channel = _prompt("选择消息通道 (telegram/feishu/none)", "telegram").lower()
+        channel = _prompt("选择入口 (tui/telegram/feishu/none)", "tui").lower()
     channel = (channel or "none").lower()
+    if channel == "tui":
+        channel = "none"
     if channel == "telegram":
         token = args.telegram_bot_token or _value(values, "TELEGRAM_BOT_TOKEN")
         owner = args.owner_id or _value(values, "OWNER_ID")
@@ -375,12 +436,16 @@ def run_setup(args: argparse.Namespace) -> int:
                 updates[key] = ""
 
     tavily_key = args.tavily_api_key or _value(values, "TAVILY_API_KEY")
+    print("")
+    print("第三步：高级配置（都可以先跳过）")
     if not args.non_interactive:
         tavily_key = _prompt(
-            "TAVILY_API_KEY (可选，默认联网搜索使用)",
+            "TAVILY_API_KEY（可选；跳过会使用系统默认轻量搜索，能力可能有限）",
             "" if not _has_value(values, "TAVILY_API_KEY") else tavily_key,
             secret=True,
         )
+        if not tavily_key:
+            print("已跳过 Tavily：联网搜索会回退到系统默认轻量搜索，结果质量和稳定性可能有限。")
     if tavily_key:
         updates["TAVILY_API_KEY"] = tavily_key
 
@@ -467,14 +532,87 @@ def run_config_get(keys: Iterable[str], *, show_secrets: bool = False) -> int:
     return 0
 
 
+def run_model_list(args: argparse.Namespace) -> int:
+    _configure_stdio()
+    print(render_model_profiles())
+    return 0
+
+
+def run_model_add(args: argparse.Namespace) -> int:
+    _configure_stdio()
+    profile = upsert_model_profile(
+        ModelProfile(
+            id=args.name,
+            name=args.name,
+            protocol=args.protocol,
+            api_key=args.api_key or "",
+            base_url=args.base_url or "",
+            model=args.model or "",
+        ),
+        activate=not args.no_activate,
+    )
+    print(f"已添加模型 Provider: {profile.id}")
+    print(f"- 接口分组: {profile.protocol}")
+    print(f"- 模型: {profile.model or '(empty)'}")
+    return 0
+
+
+def run_model_use(args: argparse.Namespace) -> int:
+    _configure_stdio()
+    try:
+        profile = set_active_model_profile(args.profile, args.model)
+    except ValueError as exc:
+        print(str(exc))
+        return 2
+    print(f"已切换模型 Provider: {profile.id}")
+    print(f"- 接口分组: {profile.protocol}")
+    print(f"- 模型: {profile.model or '(empty)'}")
+    return 0
+
+
+def run_channel_setup(args: argparse.Namespace) -> int:
+    _configure_stdio()
+    ensure_env_file()
+    values = load_env_values()
+    updates: dict[str, str] = {}
+    channel = args.channel
+
+    if channel == "telegram":
+        token = args.telegram_bot_token or _value(values, "TELEGRAM_BOT_TOKEN")
+        owner = args.owner_id or _value(values, "OWNER_ID")
+        if not args.non_interactive:
+            token = _prompt("TELEGRAM_BOT_TOKEN", "" if not _has_value(values, "TELEGRAM_BOT_TOKEN") else token, secret=True)
+            owner = _prompt("OWNER_ID (Telegram user id)", "" if not _has_value(values, "OWNER_ID") else owner)
+        updates["TELEGRAM_BOT_TOKEN"] = token
+        updates["OWNER_ID"] = owner
+        print("已更新 Telegram 通道配置。")
+    elif channel == "feishu":
+        app_id = args.feishu_app_id or _value(values, "FEISHU_APP_ID")
+        app_secret = args.feishu_app_secret or _value(values, "FEISHU_APP_SECRET")
+        if not args.non_interactive:
+            app_id = _prompt("FEISHU_APP_ID", "" if not _has_value(values, "FEISHU_APP_ID") else app_id)
+            app_secret = _prompt("FEISHU_APP_SECRET", "" if not _has_value(values, "FEISHU_APP_SECRET") else app_secret, secret=True)
+        updates["FEISHU_APP_ID"] = app_id
+        updates["FEISHU_APP_SECRET"] = app_secret
+        print("已更新 Feishu 通道配置。")
+    elif channel == "none":
+        updates.update({"TELEGRAM_BOT_TOKEN": "", "OWNER_ID": "", "FEISHU_APP_ID": "", "FEISHU_APP_SECRET": ""})
+        print("已关闭 Telegram / Feishu 通道配置。")
+
+    set_env_values(updates)
+    print("检查配置可运行: python -m hiclaw doctor")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="hiclaw", description="HiClaw service and setup tools")
     subparsers = parser.add_subparsers(dest="command")
 
     setup_parser = subparsers.add_parser("setup", help="交互式生成/更新 .env 配置")
     setup_parser.add_argument("--non-interactive", action="store_true", help="不提问，只根据参数和默认值写入 .env")
-    setup_parser.add_argument("--provider", choices=["openai", "claude"])
-    setup_parser.add_argument("--channel", choices=["telegram", "feishu", "none"])
+    setup_parser.add_argument("--provider", choices=["openai", "openai_compatible", "claude", "anthropic_compatible"])
+    setup_parser.add_argument("--profile-name")
+    setup_parser.add_argument("--channel", choices=["tui", "telegram", "feishu", "none"])
     setup_parser.add_argument("--openai-api-key")
     setup_parser.add_argument("--openai-base-url")
     setup_parser.add_argument("--openai-model")
@@ -500,6 +638,30 @@ def build_parser() -> argparse.ArgumentParser:
     get_parser = config_subparsers.add_parser("get", help="读取配置")
     get_parser.add_argument("keys", nargs="*")
     get_parser.add_argument("--show-secrets", action="store_true", help="显示完整密钥值；默认会隐藏 KEY/TOKEN/SECRET/PASSWORD")
+
+    model_parser = subparsers.add_parser("model", help="管理模型 Provider 与模型选择")
+    model_subparsers = model_parser.add_subparsers(dest="model_command")
+    model_subparsers.add_parser("list", help="列出当前可用模型 Provider")
+    model_add_parser = model_subparsers.add_parser("add", help="新增模型 Provider")
+    model_add_parser.add_argument("--protocol", choices=["openai", "openai_compatible", "claude", "anthropic_compatible"], required=True)
+    model_add_parser.add_argument("--name", required=True)
+    model_add_parser.add_argument("--api-key", required=True)
+    model_add_parser.add_argument("--base-url", default="")
+    model_add_parser.add_argument("--model", required=True)
+    model_add_parser.add_argument("--no-activate", action="store_true")
+    model_use_parser = model_subparsers.add_parser("use", help="切换当前模型 Provider")
+    model_use_parser.add_argument("profile")
+    model_use_parser.add_argument("model", nargs="?")
+
+    channel_parser = subparsers.add_parser("channel", help="快速配置 Telegram / Feishu 通道")
+    channel_subparsers = channel_parser.add_subparsers(dest="channel_command")
+    channel_setup_parser = channel_subparsers.add_parser("setup", help="配置或关闭一个消息通道")
+    channel_setup_parser.add_argument("channel", choices=["telegram", "feishu", "none"])
+    channel_setup_parser.add_argument("--non-interactive", action="store_true")
+    channel_setup_parser.add_argument("--telegram-bot-token")
+    channel_setup_parser.add_argument("--owner-id")
+    channel_setup_parser.add_argument("--feishu-app-id")
+    channel_setup_parser.add_argument("--feishu-app-secret")
 
     subparsers.add_parser("run", help="前台启动 HiClaw 服务，适合本地调试或进程管理器托管")
     subparsers.add_parser("start", help="后台启动 HiClaw 服务，等价于 scripts/start.sh")

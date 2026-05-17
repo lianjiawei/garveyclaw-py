@@ -17,14 +17,12 @@ from claude_agent_sdk import (
 from hiclaw.capabilities.tools import ToolContext, build_claude_allowed_tools
 from hiclaw.agents.tools import build_mcp_server
 from hiclaw.config import (
-    ANTHROPIC_API_KEY,
-    ANTHROPIC_BASE_URL,
-    ANTHROPIC_MODEL,
     SHOW_TOOL_TRACE,
     WORKSPACE_DIR,
 )
 from hiclaw.core.delivery import MessageSender, send_sender_text
 from hiclaw.core.agent_activity import mark_agent_tool_finished, mark_agent_tool_started
+from hiclaw.core.provider_model import get_effective_api_key, get_effective_base_url, get_effective_model
 from hiclaw.decision.models import DecisionPlan
 from hiclaw.decision.render import render_decision_plan
 from hiclaw.memory.store import append_conversation_record, build_context_snapshot
@@ -56,17 +54,17 @@ def build_claude_env() -> dict[str, str]:
     missing: list[str] = []
     env: dict[str, str] = {}
 
-    api_key = (ANTHROPIC_API_KEY or "").strip()
+    api_key = get_effective_api_key("claude")
     if api_key:
         env["ANTHROPIC_API_KEY"] = api_key
     else:
         missing.append("ANTHROPIC_API_KEY")
 
-    base_url = (ANTHROPIC_BASE_URL or "").strip()
+    base_url = get_effective_base_url("claude")
     if base_url:
         env["ANTHROPIC_BASE_URL"] = base_url
 
-    model = (ANTHROPIC_MODEL or "").strip()
+    model = get_effective_model("claude")
     if model:
         env["ANTHROPIC_MODEL"] = model
 
@@ -76,7 +74,7 @@ def build_claude_env() -> dict[str, str]:
             "Claude Provider 配置不完整，缺少环境变量："
             f"{missing_text}。\n"
             "请在项目根目录 `.env` 中补齐配置后重启服务；如果暂时不用 Claude，"
-            "可以设置 `AGENT_PROVIDER=openai` 或在会话里发送 `/openai` 切换到 OpenAI。"
+            "可以运行 `python -m hiclaw model list` 查看可用配置，并用 `/model use <profile_id>` 切换。"
         )
 
     return env
