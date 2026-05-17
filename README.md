@@ -318,6 +318,53 @@ python -m hiclaw setup
 python -m hiclaw doctor
 ```
 
+### 1.1 后续补充配置
+
+安装脚本会提供 `hiclaw` 命令，后续推荐优先使用：
+
+```bash
+hiclaw doctor
+hiclaw setup
+hiclaw model list
+hiclaw channel setup telegram
+```
+
+如果服务器提示 `hiclaw: command not found`，通常是 `~/.local/bin` 没进 PATH：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+如果你在源码目录里，也可以直接运行：
+
+```bash
+cd ~/.hiclaw/hiclaw-py
+python -m hiclaw doctor
+```
+
+常见补配置命令：
+
+```bash
+# 增加一个 OpenAI-compatible 模型服务
+hiclaw model add --protocol openai --name deepseek --api-key xxx --base-url https://.../v1 --model deepseek-chat
+
+# 增加一个 Anthropic-compatible 模型服务
+hiclaw model add --protocol claude --name my-claude-gateway --api-key xxx --base-url https://... --model claude-sonnet-4
+
+# 切换当前模型服务
+hiclaw model use deepseek
+
+# 后续再配置 Telegram / Feishu
+hiclaw channel setup telegram
+hiclaw channel setup feishu
+
+# 关闭机器人通道，仅保留 TUI / dashboard
+hiclaw channel setup none
+
+# 搜索增强：不配置也能回退到默认轻量搜索；配置 Tavily 后效果更稳定
+hiclaw config set TAVILY_API_KEY=tvly-xxx
+```
+
 也可以用命令行直接写入配置，适合服务器或脚本化部署：
 
 ```bash
