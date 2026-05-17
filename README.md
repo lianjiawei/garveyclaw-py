@@ -365,11 +365,84 @@ hiclaw channel setup none
 hiclaw config set TAVILY_API_KEY=tvly-xxx
 ```
 
-模型配置关系：
+### 1.2 多 Provider 与多模型配置
+
+HiClaw 的模型配置分成两个概念：
+
+- `protocol`：接口协议类型，不是固定厂商。当前支持 `openai` 和 `claude`。
+- `profile`：你保存的一组模型服务配置，包含名称、协议、API Key、Base URL 和模型名。
+
+选择 `openai` 并不表示只能用 OpenAI 官方模型，而是使用 OpenAI-compatible 接口。DeepSeek、通义千问、硅基流动、OpenRouter 或其他兼容网关都可以放在这个分组下。
+
+选择 `claude` 也不表示只能用 Anthropic 官方模型，而是使用 Anthropic / Claude-compatible 接口。官方 Anthropic 或第三方 Claude 兼容网关都可以放在这个分组下。
+
+配置文件关系：
 
 - `data/model_profiles.json` 保存多个模型服务配置，是 `/model` 和 `hiclaw model ...` 的 profile 列表来源。
 - `.env` 保存当前激活模型的兼容镜像，例如 `MODEL_PROFILE_NAME`、`AGENT_ROUTE`、`OPENAI_MODEL` / `ANTHROPIC_MODEL`。
-- 使用 `hiclaw setup`、`hiclaw model add`、`hiclaw model use` 或 `/model use` 切换时，会同步更新 `.env` 的 `MODEL_PROFILE_NAME`。
+- `MODEL_PROFILE_NAME` 表示当前激活的 profile id。
+- 使用 `hiclaw setup`、`hiclaw model add`、`hiclaw model use` 或 `/model use` 切换时，会同步更新 `.env`。
+
+查看当前有哪些模型服务：
+
+```bash
+hiclaw model list
+```
+
+添加一个 OpenAI-compatible 服务，例如 DeepSeek：
+
+```bash
+hiclaw model add \
+  --protocol openai \
+  --name deepseek \
+  --api-key sk-xxx \
+  --base-url https://api.deepseek.com/v1 \
+  --model deepseek-chat
+```
+
+添加一个 OpenAI-compatible 服务，例如通义千问：
+
+```bash
+hiclaw model add \
+  --protocol openai \
+  --name qwen \
+  --api-key sk-xxx \
+  --base-url https://dashscope.aliyuncs.com/compatible-mode/v1 \
+  --model qwen-plus
+```
+
+添加一个 Anthropic / Claude-compatible 服务：
+
+```bash
+hiclaw model add \
+  --protocol claude \
+  --name claude-gateway \
+  --api-key sk-xxx \
+  --base-url https://your-claude-compatible-gateway.example.com \
+  --model claude-sonnet-4
+```
+
+切换当前默认模型服务：
+
+```bash
+hiclaw model use deepseek
+```
+
+切换时顺便改模型名：
+
+```bash
+hiclaw model use qwen qwen-max
+```
+
+在 TUI、Telegram 或 Feishu 里也可以用统一的 `/model` 命令：
+
+```text
+/model
+/model use deepseek
+/model use qwen qwen-max
+```
+
+如果你只是临时换模型，推荐用 `/model use ...` 或 `hiclaw model use ...`；如果你要新增一个服务商或网关，推荐用 `hiclaw model add ...`。
 
 也可以用命令行直接写入配置，适合服务器或脚本化部署：
 
@@ -871,6 +944,8 @@ TAVILY_MAX_RESULTS=5
 ```
 
 未配置 `TAVILY_API_KEY` 时，搜索仍会尝试使用默认轻量搜索，但结果质量、时效性和访问频率可能有限。
+
+如果已经配置 Tavily，但 Tavily 本次请求返回错误或没有结果，`web_search` 会自动回退到默认轻量搜索，并在结果里说明回退原因。这通常不是 key 丢失，而是本次查询被 Tavily 服务端拒绝、超时或没有返回可用结果。
 
 ## Pixel Office Core 说明
 

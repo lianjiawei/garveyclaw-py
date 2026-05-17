@@ -413,10 +413,10 @@ async def _handle_web_search(args: dict[str, Any], _ctx: ToolContext) -> ToolRes
     try:
         response = await _search_tavily_http(query)
     except Exception as exc:
-        return _error_result(f"Search failed: {exc}")
+        return await _handle_default_web_search(query, fallback_reason=f"Tavily 搜索失败，已自动回退。原因：{_format_search_error(exc)}")
     results = response.get("results", [])
     if not results:
-        return _text_result(f"No results found for: {query}")
+        return await _handle_default_web_search(query, fallback_reason="Tavily 没有返回结果，已自动回退到系统默认轻量搜索。")
     lines: list[str] = []
     for index, result in enumerate(results, 1):
         title = result.get("title", "")
@@ -442,13 +442,24 @@ async def _search_tavily_http(query: str) -> dict[str, Any]:
         return response.json()
 
 
+def _format_search_error(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        response = exc.response
+        try:
+            detail = response.json()
+        except ValueError:
+            detail = response.text[:200]
+        return f"HTTP {response.status_code} {detail}"
+    return f"{type(exc).__name__}: {str(exc)[:200]}"
+
+
 def _clean_search_text(value: str) -> str:
     text = re.sub(r"<[^>]+>", " ", value)
     text = html.unescape(text)
     return re.sub(r"\s+", " ", text).strip()
 
 
-async def _handle_default_web_search(query: str) -> ToolResult:
+async def _handle_default_web_search(query: str, *, fallback_reason: str | None = None) -> ToolResult:
     search_url = f"https://duckduckgo.com/html/?q={quote_plus(query)}"
     try:
         async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
@@ -465,11 +476,20 @@ async def _handle_default_web_search(query: str) -> ToolResult:
         response.text,
         flags=re.DOTALL | re.IGNORECASE,
     )
-    lines = [
-        "搜索来源：系统默认轻量搜索（未配置 Tavily）。",
-        "提示：默认搜索可能在结果质量、时效性和访问频率上受限制；需要更稳定效果建议配置 TAVILY_API_KEY。",
-        "",
-    ]
+    lines = []
+    if fallback_reason:
+        lines.append(fallback_reason)
+        lines.append("搜索来源：系统默认轻量搜索。")
+        tip = "提示：Tavily 已配置但本次请求失败；默认搜索可能在结果质量、时效性和访问频率上受限制。"
+    else:
+        lines.append("搜索来源：系统默认轻量搜索（未配置 Tavily）。")
+        tip = "提示：默认搜索可能在结果质量、时效性和访问频率上受限制；需要更稳定效果建议配置 TAVILY_API_KEY。"
+    lines.extend(
+        [
+            tip,
+            "",
+        ]
+    )
     max_results = max(1, min(config.TAVILY_MAX_RESULTS, 5))
     for index, (url, title, snippet) in enumerate(matches[:max_results], 1):
         lines.append(f"{index}. {_clean_search_text(title)}")
