@@ -74,7 +74,7 @@ def build_claude_env() -> dict[str, str]:
             "Claude Provider 配置不完整，缺少环境变量："
             f"{missing_text}。\n"
             "请在项目根目录 `.env` 中补齐配置后重启服务；如果暂时不用 Claude，"
-            "可以运行 `python -m hiclaw model list` 查看可用配置，并用 `/model use <profile_id>` 切换。"
+            "可以运行 `hiclaw model list` 查看可用配置，并用 `/model use <profile_id>` 切换。"
         )
 
     return env

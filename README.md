@@ -309,13 +309,13 @@ cd ..
 新用户推荐直接运行初始化向导，它会自动创建 `.env`，并引导你选择 Provider、消息通道和 dashboard 监听地址：
 
 ```bash
-python -m hiclaw setup
+hiclaw setup
 ```
 
 检查当前配置是否满足启动条件：
 
 ```bash
-python -m hiclaw doctor
+hiclaw doctor
 ```
 
 ### 1.1 后续补充配置
@@ -368,9 +368,9 @@ hiclaw config set TAVILY_API_KEY=tvly-xxx
 也可以用命令行直接写入配置，适合服务器或脚本化部署：
 
 ```bash
-python -m hiclaw config set AGENT_PROVIDER=openai OPENAI_API_KEY=sk-xxx
-python -m hiclaw config set TELEGRAM_BOT_TOKEN=xxx OWNER_ID=123456
-python -m hiclaw config set HICLAW_DASHBOARD_HOST=0.0.0.0 HICLAW_DASHBOARD_PORT=8765
+hiclaw config set AGENT_PROVIDER=openai OPENAI_API_KEY=sk-xxx
+hiclaw config set TELEGRAM_BOT_TOKEN=xxx OWNER_ID=123456
+hiclaw config set HICLAW_DASHBOARD_HOST=0.0.0.0 HICLAW_DASHBOARD_PORT=8765
 ```
 
 读取配置时默认会隐藏 `KEY` / `TOKEN` / `SECRET` / `PASSWORD` 类字段；排查问题时确实需要完整值，可以加 `--show-secrets`。
@@ -515,7 +515,7 @@ hiclaw-tui
 hiclaw run
 ```
 
-或：
+如果你在源码目录里临时调试，也可以用：
 
 ```bash
 python -m hiclaw run
@@ -665,8 +665,8 @@ python -m pip install -e ".[asr]"
 推荐先运行：
 
 ```bash
-python -m hiclaw setup
-python -m hiclaw doctor
+hiclaw setup
+hiclaw doctor
 ```
 
 如果你手动编辑 `.env`，至少需要修改这些项：
@@ -702,7 +702,7 @@ FEISHU_APP_SECRET=your_feishu_app_secret_here
 
 重要说明：
 
-- `python -m hiclaw` 启动前会检查关键配置，缺少 Provider key 或消息通道时会给出修复建议
+- `hiclaw run` 启动前会检查关键配置，缺少 Provider key 或消息通道时会给出修复建议
 - 如果你只是想在服务器上先验证工具和模型，不配 Telegram / Feishu 时请用 `hiclaw-tui`
 - 如果你要公网访问 dashboard，`HICLAW_DASHBOARD_HOST` 必须设为 `0.0.0.0`
 
@@ -831,7 +831,7 @@ TAVILY_API_KEY=your_tavily_api_key_here
 
 解决方式：
 
-- 配置 Telegram 或 Feishu 后再运行 `python -m hiclaw`
+- 配置 Telegram 或 Feishu 后再运行 `hiclaw run`
 - 或改为使用本地 `hiclaw-tui`
 
 ### 10. 更新代码

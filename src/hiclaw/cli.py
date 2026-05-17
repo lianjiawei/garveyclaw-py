@@ -119,7 +119,7 @@ def _print_startup_preflight_error() -> None:
         if issue.hint:
             print(f"  修复建议: {issue.hint}")
     print("")
-    print("你可以运行 `python -m hiclaw setup` 进入初始化向导，或运行 `python -m hiclaw doctor` 查看完整诊断。")
+    print("你可以运行 `hiclaw setup` 进入初始化向导，或运行 `hiclaw doctor` 查看完整诊断。")
     raise SystemExit(2)
 
 

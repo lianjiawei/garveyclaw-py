@@ -190,5 +190,5 @@ def render_model_profiles() -> str:
         lines.append(f"{marker} {profile.id}: {profile.name} | {profile.model or '(empty)'} | {profile.base_url or '(default endpoint)'}")
     lines.append("")
     lines.append("用法: /model use <profile_id> [model]")
-    lines.append("新增: python -m hiclaw model add --protocol openai --name deepseek --api-key xxx --base-url https://.../v1 --model deepseek-chat")
+    lines.append("新增: hiclaw model add --protocol openai --name deepseek --api-key xxx --base-url https://.../v1 --model deepseek-chat")
     return "\n".join(lines)

@@ -79,7 +79,7 @@ def get_image_api_key() -> str:
     if not api_key:
         raise RuntimeError(
             "OpenAI-compatible image API key is not configured. "
-            "Run `python -m hiclaw setup`, or add a provider with `python -m hiclaw model add --protocol openai ...`."
+            "Run `hiclaw setup`, or add a provider with `hiclaw model add --protocol openai ...`."
         )
     return api_key
 
@@ -219,7 +219,7 @@ def build_chat_headers() -> dict[str, str]:
     if not api_key:
         raise RuntimeError(
             "OpenAI-compatible API key is not configured. "
-            "Run `python -m hiclaw setup`, or add one with `python -m hiclaw model add --protocol openai ...`."
+            "Run `hiclaw setup`, or add one with `hiclaw model add --protocol openai ...`."
         )
     return {
         "Authorization": f"Bearer {api_key}",

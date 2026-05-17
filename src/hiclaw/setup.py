@@ -196,7 +196,7 @@ def validate_env(values: dict[str, str] | None = None, *, require_channel: bool 
                 "error",
                 "missing_env",
                 f"未找到配置文件：{ENV_FILE}",
-                "运行 `python -m hiclaw setup` 生成并填写 .env。",
+                "运行 `hiclaw setup` 生成并填写 .env。",
             )
         )
         return issues
@@ -211,15 +211,15 @@ def validate_env(values: dict[str, str] | None = None, *, require_channel: bool 
                 "error",
                 "invalid_provider",
                 "AGENT_ROUTE 无效。可用值：openai/openai_compatible/claude/anthropic_compatible。",
-                "运行 `python -m hiclaw config set AGENT_ROUTE=openai`。",
+                "运行 `hiclaw config set AGENT_ROUTE=openai`。",
             )
         )
     provider_key_ready = bool(active_profile.api_key) and active_profile.protocol == provider
     provider_model_ready = bool(active_profile.model) and active_profile.protocol == provider
     if provider == "openai" and not (_has_value(values, "OPENAI_API_KEY") or provider_key_ready):
-        issues.append(ConfigIssue("warning", "missing_openai_key", "当前模型 Provider 是 OpenAI-compatible，但 API Key 未配置；模型对话暂不可用。", "运行 `python -m hiclaw setup`，或用 `python -m hiclaw model add --protocol openai ...` 添加。"))
+        issues.append(ConfigIssue("warning", "missing_openai_key", "当前模型 Provider 是 OpenAI-compatible，但 API Key 未配置；模型对话暂不可用。", "运行 `hiclaw setup`，或用 `hiclaw model add --protocol openai ...` 添加。"))
     elif provider == "claude" and not (_has_value(values, "ANTHROPIC_API_KEY") or provider_key_ready):
-        issues.append(ConfigIssue("warning", "missing_claude_key", "当前模型 Provider 是 Anthropic-compatible，但 API Key 未配置；模型对话暂不可用。", "运行 `python -m hiclaw setup`，或用 `python -m hiclaw model add --protocol claude ...` 添加。"))
+        issues.append(ConfigIssue("warning", "missing_claude_key", "当前模型 Provider 是 Anthropic-compatible，但 API Key 未配置；模型对话暂不可用。", "运行 `hiclaw setup`，或用 `hiclaw model add --protocol claude ...` 添加。"))
     if provider == "openai" and not (_has_value(values, "OPENAI_MODEL") or provider_model_ready):
         issues.append(ConfigIssue("warning", "missing_openai_model", "OPENAI_MODEL 为空，将由服务端默认模型决定。", "建议显式填写 OPENAI_MODEL，降低兼容服务商行为差异。"))
     if provider == "claude" and not (_has_value(values, "ANTHROPIC_MODEL") or provider_model_ready):
@@ -511,11 +511,11 @@ def run_setup(args: argparse.Namespace) -> int:
     print_doctor_report(issues)
     print("")
     print("常用命令:")
-    print("- 前台启动: python -m hiclaw run")
-    print("- 后台启动: python -m hiclaw start")
-    print("- 停止后台: python -m hiclaw stop")
+    print("- 前台启动: hiclaw run")
+    print("- 后台启动: hiclaw start")
+    print("- 停止后台: hiclaw stop")
     print("- 本地 TUI: hiclaw-tui")
-    print("- 检查配置: python -m hiclaw doctor")
+    print("- 检查配置: hiclaw doctor")
     return 1 if any(issue.level == "error" for issue in issues) else 0
 
 
@@ -643,7 +643,7 @@ def run_channel_setup(args: argparse.Namespace) -> int:
         print("已关闭 Telegram / Feishu 通道配置。")
 
     set_env_values(updates)
-    print("检查配置可运行: python -m hiclaw doctor")
+    print("检查配置可运行: hiclaw doctor")
     return 0
 
 
