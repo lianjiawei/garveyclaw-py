@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable
 
 from hiclaw.config import PROJECT_ROOT
-from hiclaw.core.model_profiles import ModelProfile, get_active_model_profile, render_model_profiles, set_active_model_profile, upsert_model_profile
+from hiclaw.core.model_profiles import ModelProfile, get_active_model_profile, list_model_profiles, render_model_profiles, set_active_model_profile, upsert_model_profile
 from hiclaw.core.provider_state import normalize_provider
 
 ENV_FILE = PROJECT_ROOT / ".env"
@@ -217,9 +217,23 @@ def validate_env(values: dict[str, str] | None = None, *, require_channel: bool 
     provider_key_ready = bool(active_profile.api_key) and active_profile.protocol == provider
     provider_model_ready = bool(active_profile.model) and active_profile.protocol == provider
     if provider == "openai" and not (_has_value(values, "OPENAI_API_KEY") or provider_key_ready):
-        issues.append(ConfigIssue("warning", "missing_openai_key", "当前模型 Provider 是 OpenAI-compatible，但 API Key 未配置；模型对话暂不可用。", "运行 `hiclaw setup`，或用 `hiclaw model add --protocol openai ...` 添加。"))
+        issues.append(
+            ConfigIssue(
+                "warning",
+                "missing_openai_key",
+                "当前模型 Provider 是 OpenAI-compatible，但 API Key 未配置；模型对话暂不可用。",
+                "运行 `hiclaw setup`，或用 `hiclaw model add --protocol openai ...` 添加。",
+            )
+        )
     elif provider == "claude" and not (_has_value(values, "ANTHROPIC_API_KEY") or provider_key_ready):
-        issues.append(ConfigIssue("warning", "missing_claude_key", "当前模型 Provider 是 Anthropic-compatible，但 API Key 未配置；模型对话暂不可用。", "运行 `hiclaw setup`，或用 `hiclaw model add --protocol claude ...` 添加。"))
+        issues.append(
+            ConfigIssue(
+                "warning",
+                "missing_claude_key",
+                "当前模型 Provider 是 Anthropic-compatible，但 API Key 未配置；模型对话暂不可用。",
+                "运行 `hiclaw setup`，或用 `hiclaw model add --protocol claude ...` 添加。",
+            )
+        )
     if provider == "openai" and not (_has_value(values, "OPENAI_MODEL") or provider_model_ready):
         issues.append(ConfigIssue("warning", "missing_openai_model", "OPENAI_MODEL 为空，将由服务端默认模型决定。", "建议显式填写 OPENAI_MODEL，降低兼容服务商行为差异。"))
     if provider == "claude" and not (_has_value(values, "ANTHROPIC_MODEL") or provider_model_ready):
@@ -359,6 +373,18 @@ def _default_channel(values: dict[str, str]) -> str:
     return "tui"
 
 
+def _default_profile_for_protocol(protocol: str) -> ModelProfile | None:
+    active = get_active_model_profile()
+    if active.protocol == protocol:
+        return active
+
+    profiles = [profile for profile in list_model_profiles() if profile.protocol == protocol]
+    non_default = [profile for profile in profiles if not profile.id.endswith("-default")]
+    if non_default:
+        return non_default[0]
+    return profiles[0] if profiles else None
+
+
 def run_setup(args: argparse.Namespace) -> int:
     _configure_stdio()
     created = ensure_env_file()
@@ -390,25 +416,26 @@ def run_setup(args: argparse.Namespace) -> int:
         )
     updates["AGENT_PROVIDER"] = provider
     updates["AGENT_ROUTE"] = provider
+    existing_profile = _default_profile_for_protocol(provider)
 
     if provider == "openai":
-        profile_name = getattr(args, "profile_name", None) or _value(values, "MODEL_PROFILE_NAME") or "openai-default"
+        profile_name = getattr(args, "profile_name", None) or (existing_profile.id if existing_profile else "") or _value(values, "MODEL_PROFILE_NAME") or "openai-default"
         if not args.non_interactive:
             profile_name = _prompt("给这个模型服务起个名字，例如 deepseek、qwen、openai-main", profile_name)
-        key = args.openai_api_key or _value(values, "OPENAI_API_KEY")
+        key = args.openai_api_key or (existing_profile.api_key if existing_profile else "") or _value(values, "OPENAI_API_KEY")
         if not args.non_interactive:
-            key = _prompt("OPENAI_API_KEY", "" if not _has_value(values, "OPENAI_API_KEY") else key, secret=True)
+            key = _prompt("OPENAI_API_KEY", key, secret=True)
         if key:
             updates["OPENAI_API_KEY"] = key
-        base_url = args.openai_base_url if args.openai_base_url is not None else _value(values, "OPENAI_BASE_URL")
+        base_url = args.openai_base_url if args.openai_base_url is not None else ((existing_profile.base_url if existing_profile else "") or _value(values, "OPENAI_BASE_URL"))
         if not args.non_interactive:
-            base_url = _prompt("OPENAI_BASE_URL（官方 OpenAI 可留空；第三方兼容服务通常填写 /v1 地址）", base_url if _has_value(values, "OPENAI_BASE_URL") else "")
+            base_url = _prompt("OPENAI_BASE_URL（官方 OpenAI 可留空；第三方兼容服务通常填写 /v1 地址）", base_url)
         updates["OPENAI_BASE_URL"] = base_url
-        model = args.openai_model or _value(values, "OPENAI_MODEL") or DEFAULTS["OPENAI_MODEL"]
+        model = args.openai_model or (existing_profile.model if existing_profile else "") or _value(values, "OPENAI_MODEL") or DEFAULTS["OPENAI_MODEL"]
         if not args.non_interactive:
             model = _prompt("模型名（填写服务商给你的 model id，例如 gpt-4o-mini、deepseek-chat、qwen-plus）", model)
         updates["OPENAI_MODEL"] = model
-        upsert_model_profile(
+        profile = upsert_model_profile(
             ModelProfile(
                 id=profile_name.strip() or "openai-default",
                 name=profile_name.strip() or "OpenAI compatible",
@@ -418,24 +445,29 @@ def run_setup(args: argparse.Namespace) -> int:
                 model=model or "",
             )
         )
+        updates["MODEL_PROFILE_NAME"] = profile.id
     else:
-        profile_name = getattr(args, "profile_name", None) or _value(values, "MODEL_PROFILE_NAME") or "claude-default"
+        profile_name = getattr(args, "profile_name", None) or (existing_profile.id if existing_profile else "") or _value(values, "MODEL_PROFILE_NAME") or "claude-default"
         if not args.non_interactive:
             profile_name = _prompt("给这个模型服务起个名字，例如 claude、qwen-anthropic、my-gateway", profile_name)
-        key = args.anthropic_api_key or _value(values, "ANTHROPIC_API_KEY")
+        key = args.anthropic_api_key or (existing_profile.api_key if existing_profile else "") or _value(values, "ANTHROPIC_API_KEY")
         if not args.non_interactive:
-            key = _prompt("ANTHROPIC_API_KEY", "" if not _has_value(values, "ANTHROPIC_API_KEY") else key, secret=True)
+            key = _prompt("ANTHROPIC_API_KEY", key, secret=True)
         if key:
             updates["ANTHROPIC_API_KEY"] = key
-        base_url = args.anthropic_base_url if args.anthropic_base_url is not None else _value(values, "ANTHROPIC_BASE_URL")
+        base_url = (
+            args.anthropic_base_url
+            if args.anthropic_base_url is not None
+            else ((existing_profile.base_url if existing_profile else "") or _value(values, "ANTHROPIC_BASE_URL"))
+        )
         if not args.non_interactive:
-            base_url = _prompt("ANTHROPIC_BASE_URL（官方 Anthropic 可留空；第三方兼容网关请填写）", base_url if _has_value(values, "ANTHROPIC_BASE_URL") else "")
+            base_url = _prompt("ANTHROPIC_BASE_URL（官方 Anthropic 可留空；第三方兼容网关请填写）", base_url)
         updates["ANTHROPIC_BASE_URL"] = base_url
-        model = args.anthropic_model or _value(values, "ANTHROPIC_MODEL")
+        model = args.anthropic_model or (existing_profile.model if existing_profile else "") or _value(values, "ANTHROPIC_MODEL")
         if not args.non_interactive:
-            model = _prompt("模型名（填写服务商给你的 model id）", model if _has_value(values, "ANTHROPIC_MODEL") else "")
+            model = _prompt("模型名（填写服务商给你的 model id）", model)
         updates["ANTHROPIC_MODEL"] = model
-        upsert_model_profile(
+        profile = upsert_model_profile(
             ModelProfile(
                 id=profile_name.strip() or "claude-default",
                 name=profile_name.strip() or "Anthropic compatible",
@@ -445,6 +477,7 @@ def run_setup(args: argparse.Namespace) -> int:
                 model=model or "",
             )
         )
+        updates["MODEL_PROFILE_NAME"] = profile.id
 
     channel = args.channel
     print("")
@@ -597,6 +630,7 @@ def run_model_list(args: argparse.Namespace) -> int:
 
 def run_model_add(args: argparse.Namespace) -> int:
     _configure_stdio()
+    ensure_env_file()
     profile = upsert_model_profile(
         ModelProfile(
             id=args.name,
@@ -608,6 +642,13 @@ def run_model_add(args: argparse.Namespace) -> int:
         ),
         activate=not args.no_activate,
     )
+    if not args.no_activate:
+        updates = {"MODEL_PROFILE_NAME": profile.id, "AGENT_PROVIDER": profile.protocol, "AGENT_ROUTE": profile.protocol}
+        if profile.protocol == "openai":
+            updates.update({"OPENAI_API_KEY": profile.api_key, "OPENAI_BASE_URL": profile.base_url, "OPENAI_MODEL": profile.model})
+        else:
+            updates.update({"ANTHROPIC_API_KEY": profile.api_key, "ANTHROPIC_BASE_URL": profile.base_url, "ANTHROPIC_MODEL": profile.model})
+        set_env_values(updates)
     print(f"已添加模型 Provider: {profile.id}")
     print(f"- 接口分组: {profile.protocol}")
     print(f"- 模型: {profile.model or '(empty)'}")
@@ -621,6 +662,13 @@ def run_model_use(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(str(exc))
         return 2
+    ensure_env_file()
+    updates = {"MODEL_PROFILE_NAME": profile.id, "AGENT_PROVIDER": profile.protocol, "AGENT_ROUTE": profile.protocol}
+    if profile.protocol == "openai":
+        updates.update({"OPENAI_API_KEY": profile.api_key, "OPENAI_BASE_URL": profile.base_url, "OPENAI_MODEL": profile.model})
+    else:
+        updates.update({"ANTHROPIC_API_KEY": profile.api_key, "ANTHROPIC_BASE_URL": profile.base_url, "ANTHROPIC_MODEL": profile.model})
+    set_env_values(updates)
     print(f"已切换模型 Provider: {profile.id}")
     print(f"- 接口分组: {profile.protocol}")
     print(f"- 模型: {profile.model or '(empty)'}")

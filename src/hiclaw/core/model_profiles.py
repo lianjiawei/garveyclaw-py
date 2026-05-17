@@ -10,13 +10,16 @@ from hiclaw.config import (
     ANTHROPIC_MODEL,
     AGENT_PROVIDER,
     DATA_DIR,
+    MODEL_PROFILE_NAME,
     OPENAI_API_KEY,
     OPENAI_BASE_URL,
     OPENAI_MODEL,
+    PROJECT_ROOT,
 )
 from hiclaw.core.provider_state import normalize_provider
 
 MODEL_PROFILES_FILE = DATA_DIR / "model_profiles.json"
+ENV_FILE = PROJECT_ROOT / ".env"
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +76,47 @@ def _save_raw(data: dict) -> None:
     MODEL_PROFILES_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _sync_active_profile_to_env(profile: ModelProfile) -> None:
+    if not ENV_FILE.exists():
+        return
+    try:
+        lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+
+    updates = {
+        "MODEL_PROFILE_NAME": profile.id,
+        "AGENT_ROUTE": profile.protocol,
+        "AGENT_PROVIDER": profile.protocol,
+    }
+    if profile.protocol == "openai":
+        updates.update({"OPENAI_API_KEY": profile.api_key, "OPENAI_BASE_URL": profile.base_url, "OPENAI_MODEL": profile.model})
+    else:
+        updates.update({"ANTHROPIC_API_KEY": profile.api_key, "ANTHROPIC_BASE_URL": profile.base_url, "ANTHROPIC_MODEL": profile.model})
+
+    seen: set[str] = set()
+    output: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            output.append(line)
+            continue
+        key, _value = line.split("=", 1)
+        key = key.strip()
+        if key in updates:
+            output.append(f"{key}={updates[key]}")
+            seen.add(key)
+        else:
+            output.append(line)
+    for key, value in updates.items():
+        if key not in seen:
+            output.append(f"{key}={value}")
+    try:
+        ENV_FILE.write_text("\n".join(output) + "\n", encoding="utf-8")
+    except OSError:
+        return
+
+
 def list_model_profiles() -> list[ModelProfile]:
     profiles = _env_profiles()
     raw = _load_raw()
@@ -97,9 +141,12 @@ def list_model_profiles() -> list[ModelProfile]:
 def get_active_profile_id() -> str:
     raw = _load_raw()
     active = str(raw.get("active_profile") or "").strip()
+    env_active = str(MODEL_PROFILE_NAME or "").strip()
     profiles = {profile.id: profile for profile in list_model_profiles()}
     if active in profiles:
         return active
+    if env_active in profiles:
+        return env_active
     if "openai-default" in profiles:
         return "openai-default"
     if profiles:
@@ -133,6 +180,7 @@ def set_active_model_profile(profile_id: str, model: str | None = None) -> Model
     raw = _load_raw()
     raw["active_profile"] = selected.id
     _save_raw(raw)
+    _sync_active_profile_to_env(selected)
     return selected
 
 
@@ -153,6 +201,8 @@ def upsert_model_profile(profile: ModelProfile, *, activate: bool = True) -> Mod
     if activate:
         raw["active_profile"] = normalized.id
     _save_raw(raw)
+    if activate:
+        _sync_active_profile_to_env(normalized)
     return normalized
 
 

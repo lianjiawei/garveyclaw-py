@@ -365,6 +365,12 @@ hiclaw channel setup none
 hiclaw config set TAVILY_API_KEY=tvly-xxx
 ```
 
+模型配置关系：
+
+- `data/model_profiles.json` 保存多个模型服务配置，是 `/model` 和 `hiclaw model ...` 的 profile 列表来源。
+- `.env` 保存当前激活模型的兼容镜像，例如 `MODEL_PROFILE_NAME`、`AGENT_ROUTE`、`OPENAI_MODEL` / `ANTHROPIC_MODEL`。
+- 使用 `hiclaw setup`、`hiclaw model add`、`hiclaw model use` 或 `/model use` 切换时，会同步更新 `.env` 的 `MODEL_PROFILE_NAME`。
+
 也可以用命令行直接写入配置，适合服务器或脚本化部署：
 
 ```bash
@@ -408,6 +414,8 @@ Copy-Item .env.example .env
 
 ```env
 AGENT_PROVIDER=claude
+AGENT_ROUTE=claude
+MODEL_PROFILE_NAME=claude-main
 
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ANTHROPIC_BASE_URL=
@@ -673,6 +681,8 @@ hiclaw doctor
 
 ```env
 AGENT_PROVIDER=claude
+AGENT_ROUTE=claude
+MODEL_PROFILE_NAME=claude-main
 
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ANTHROPIC_BASE_URL=
