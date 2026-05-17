@@ -14,11 +14,6 @@ from urllib.parse import quote_plus
 
 import httpx
 
-try:
-    from tavily import TavilyClient
-except ImportError:
-    TavilyClient = None  # type: ignore[assignment]
-
 import hiclaw.config as config
 from hiclaw.core.confirmation import ToolConfirmationRequest, has_session_tool_grant, request_tool_confirmation
 from hiclaw.core.agent_activity import mark_agent_tool_cancelled, mark_agent_tool_started, mark_agent_waiting
@@ -413,11 +408,10 @@ async def _handle_web_search(args: dict[str, Any], _ctx: ToolContext) -> ToolRes
     query = str(args.get("query") or "").strip()
     if not query:
         return _error_result("错误：query 不能为空。")
-    if not config.TAVILY_API_KEY or TavilyClient is None:
+    if not config.TAVILY_API_KEY:
         return await _handle_default_web_search(query)
     try:
-        client = TavilyClient(api_key=config.TAVILY_API_KEY)
-        response = client.search(query=query, search_depth=config.TAVILY_SEARCH_DEPTH, max_results=config.TAVILY_MAX_RESULTS)
+        response = await _search_tavily_http(query)
     except Exception as exc:
         return _error_result(f"Search failed: {exc}")
     results = response.get("results", [])
@@ -430,6 +424,22 @@ async def _handle_web_search(args: dict[str, Any], _ctx: ToolContext) -> ToolRes
         content = (result.get("content", "") or "")[:300]
         lines.append(f"{index}. {title}\n   {url}\n   {content}")
     return _text_result(f"Search results for '{query}':\n\n" + "\n\n".join(lines))
+
+
+async def _search_tavily_http(query: str) -> dict[str, Any]:
+    payload = {
+        "query": query,
+        "search_depth": config.TAVILY_SEARCH_DEPTH,
+        "max_results": config.TAVILY_MAX_RESULTS,
+    }
+    headers = {
+        "Authorization": f"Bearer {config.TAVILY_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post("https://api.tavily.com/search", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
 
 
 def _clean_search_text(value: str) -> str:

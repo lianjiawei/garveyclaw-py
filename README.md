@@ -39,7 +39,7 @@ HiClaw Py 是一个面向长期运行、可扩展和可观测的多通道 AI Age
 - workflow CRUD
 - 自然语言生成 workflow
 - skill 管理与热加载
-- Tavily 联网搜索工具 `web_search`
+- 联网搜索工具 `web_search`：可选 Tavily 增强，未配置时回退默认轻量搜索
 
 ### 运行时能力
 
@@ -361,7 +361,7 @@ hiclaw channel setup feishu
 # 关闭机器人通道，仅保留 TUI / dashboard
 hiclaw channel setup none
 
-# 搜索增强：不配置也能回退到默认轻量搜索；配置 Tavily 后效果更稳定
+# 搜索增强：可选；不配置也能回退到默认轻量搜索
 hiclaw config set TAVILY_API_KEY=tvly-xxx
 ```
 
@@ -420,7 +420,7 @@ TAVILY_API_KEY=
 说明：
 
 - `hiclaw-tui` 不依赖 Telegram 或 Feishu
-- 如果要联网搜索，必须配置 `TAVILY_API_KEY`；不需要搜索时可以留空
+- `TAVILY_API_KEY` 是可选搜索增强；留空时会使用默认轻量搜索，质量、时效性和访问频率可能有限
 
 #### 方案 B：Telegram Bot
 
@@ -823,7 +823,7 @@ cd ..
 TAVILY_API_KEY=your_tavily_api_key_here
 ```
 
-当前联网搜索统一走 `web_search -> Tavily`。
+`web_search` 会优先使用 Tavily；如果没有配置 `TAVILY_API_KEY`，会回退到系统默认轻量搜索。默认搜索能力可能受质量、时效性和访问频率限制。
 
 #### 4. 主程序启动直接报错
 
@@ -850,9 +850,9 @@ python -m pip install -e .
 
 ## 联网搜索说明
 
-当前联网搜索统一通过工具 `web_search` 完成，后端为 Tavily。
+联网搜索统一通过工具 `web_search` 完成。Tavily 是可选增强；配置 `TAVILY_API_KEY` 后会通过 HTTP 调用 Tavily，留空则回退到系统默认轻量搜索。
 
-需要配置：
+可选配置：
 
 ```env
 TAVILY_API_KEY=your_tavily_api_key_here
@@ -860,7 +860,7 @@ TAVILY_SEARCH_DEPTH=basic
 TAVILY_MAX_RESULTS=5
 ```
 
-未配置 `TAVILY_API_KEY` 时，联网搜索不会生效。
+未配置 `TAVILY_API_KEY` 时，搜索仍会尝试使用默认轻量搜索，但结果质量、时效性和访问频率可能有限。
 
 ## Pixel Office Core 说明
 

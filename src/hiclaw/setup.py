@@ -8,8 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from prompt_toolkit.shortcuts.dialogs import radiolist_dialog
-
 from hiclaw.config import PROJECT_ROOT
 from hiclaw.core.model_profiles import ModelProfile, get_active_model_profile, render_model_profiles, set_active_model_profile, upsert_model_profile
 from hiclaw.core.provider_state import normalize_provider
@@ -279,7 +277,14 @@ def validate_env(values: dict[str, str] | None = None, *, require_channel: bool 
             )
         )
     elif any(marker in tavily.lower() for marker in PLACEHOLDER_MARKERS):
-        issues.append(ConfigIssue("warning", "placeholder_tavily", "TAVILY_API_KEY 仍是模板占位值，联网搜索工具会不可用。", "不需要联网搜索可以留空；需要时填写真实 Tavily API Key。"))
+        issues.append(
+            ConfigIssue(
+                "warning",
+                "placeholder_tavily",
+                "TAVILY_API_KEY 仍是模板占位值；web_search 会回退到系统默认轻量搜索。",
+                "不需要 Tavily 增强搜索可以留空；需要更稳定效果时填写真实 Tavily API Key。",
+            )
+        )
 
     return issues
 
@@ -319,15 +324,7 @@ def _choose(label: str, options: list[tuple[str, str]], default: str) -> str:
     for index, (value, description) in enumerate(options, 1):
         if value == normalized_default:
             default_index = index
-    if sys.stdin.isatty() and sys.stdout.isatty():
-        result = radiolist_dialog(
-            title="HiClaw setup",
-            text=label,
-            values=options,
-        ).run()
-        if result:
-            return str(result)
-        return options[default_index - 1][0]
+
     print(label)
     for index, (value, description) in enumerate(options, 1):
         marker = " *" if value == normalized_default else ""
