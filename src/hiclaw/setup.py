@@ -310,10 +310,10 @@ def _prompt(label: str, default: str = "", *, secret: bool = False) -> str:
     if secret:
         import getpass
 
-        suffix = " [已配置，回车保留]" if default else ""
+        suffix = " [已配置，回车跳过/保留]" if default else " [可跳过，直接回车]"
         value = getpass.getpass(f"{label}{suffix}: ").strip()
     else:
-        suffix = f" [{default}]" if default else ""
+        suffix = f" [当前/默认: {default}，回车跳过/保留]" if default else " [可跳过，直接回车]"
         value = input(f"{label}{suffix}: ").strip()
     return value or default
 
@@ -329,7 +329,7 @@ def _choose(label: str, options: list[tuple[str, str]], default: str) -> str:
     for index, (value, description) in enumerate(options, 1):
         marker = " *" if value == normalized_default else ""
         print(f"  {index}. {description}{marker}")
-    answer = input(f"请选择编号 [{default_index}]: ").strip().lower()
+    answer = input(f"请选择编号，或直接回车跳过/保留当前选项 [{default_index}]: ").strip().lower()
     if not answer:
         return options[default_index - 1][0]
     if answer.isdigit():
@@ -345,10 +345,18 @@ def _choose(label: str, options: list[tuple[str, str]], default: str) -> str:
 
 def _yes_no(label: str, default: bool = False) -> bool:
     marker = "Y/n" if default else "y/N"
-    value = input(f"{label} [{marker}]: ").strip().lower()
+    value = input(f"{label} [{marker}，回车跳过/保留默认]: ").strip().lower()
     if not value:
         return default
     return value in {"y", "yes", "1", "true", "是"}
+
+
+def _default_channel(values: dict[str, str]) -> str:
+    if _has_value(values, "TELEGRAM_BOT_TOKEN"):
+        return "telegram"
+    if _has_value(values, "FEISHU_APP_ID") or _has_value(values, "FEISHU_APP_SECRET"):
+        return "feishu"
+    return "tui"
 
 
 def run_setup(args: argparse.Namespace) -> int:
@@ -361,6 +369,8 @@ def run_setup(args: argparse.Namespace) -> int:
     print(f"- 配置文件: {ENV_FILE}")
     if created:
         print("- 已根据 .env.example 创建 .env")
+    else:
+        print("- 检测到已有 .env；已有值或默认值可直接回车跳过/保留")
     print("")
     print("第一步：配置模型 Provider")
     print("这里选择的是接口协议，不是只能用官方模型。")
@@ -371,7 +381,7 @@ def run_setup(args: argparse.Namespace) -> int:
         provider = normalize_provider(DEFAULTS["AGENT_PROVIDER"], default="openai")
     if not args.non_interactive:
         provider = _choose(
-            "请选择你手里的 API 属于哪一类：",
+            "请选择你手里的 API 属于哪一类（已有配置可直接回车跳过）：",
             [
                 ("openai", "OpenAI 兼容接口，例如 OpenAI、DeepSeek、通义千问、硅基流动、OpenRouter"),
                 ("claude", "Anthropic / Claude 兼容接口，例如 Anthropic 官方或 Claude 兼容网关"),
@@ -440,15 +450,16 @@ def run_setup(args: argparse.Namespace) -> int:
     print("")
     print("第二步：选择使用入口")
     if not channel and not args.non_interactive:
+        channel_default = _default_channel(values)
         channel = _choose(
-            "请选择使用入口：",
+            "请选择使用入口（已有配置可直接回车跳过）：",
             [
                 ("tui", "本地 TUI（推荐先用这个测试模型）"),
                 ("telegram", "Telegram Bot"),
                 ("feishu", "Feishu 机器人"),
                 ("none", "暂不配置入口，只启动 dashboard"),
             ],
-            "tui",
+            channel_default,
         )
     channel = (channel or "none").lower()
     if channel == "tui":
@@ -494,9 +505,12 @@ def run_setup(args: argparse.Namespace) -> int:
 
     dashboard_host = args.dashboard_host or _value(values, "HICLAW_DASHBOARD_HOST") or DEFAULTS["HICLAW_DASHBOARD_HOST"]
     if not args.non_interactive:
-        default_host = "127.0.0.1" if _is_windows() else dashboard_host
-        if _yes_no("Dashboard 是否允许公网/局域网访问", default=False):
-            default_host = "0.0.0.0"
+        if _has_value(values, "HICLAW_DASHBOARD_HOST"):
+            default_host = dashboard_host
+        else:
+            default_host = "127.0.0.1" if _is_windows() else dashboard_host
+            if _yes_no("Dashboard 是否允许公网/局域网访问", default=False):
+                default_host = "0.0.0.0"
         dashboard_host = _prompt("HICLAW_DASHBOARD_HOST", default_host)
     updates["HICLAW_DASHBOARD_HOST"] = dashboard_host
     updates["HICLAW_DASHBOARD_PORT"] = str(args.dashboard_port or _value(values, "HICLAW_DASHBOARD_PORT") or DEFAULTS["HICLAW_DASHBOARD_PORT"])
