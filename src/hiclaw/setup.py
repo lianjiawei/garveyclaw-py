@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from prompt_toolkit.shortcuts.dialogs import radiolist_dialog
+
 from hiclaw.config import PROJECT_ROOT
 from hiclaw.core.model_profiles import ModelProfile, get_active_model_profile, render_model_profiles, set_active_model_profile, upsert_model_profile
 from hiclaw.core.provider_state import normalize_provider
@@ -311,6 +313,39 @@ def _prompt(label: str, default: str = "", *, secret: bool = False) -> str:
     return value or default
 
 
+def _choose(label: str, options: list[tuple[str, str]], default: str) -> str:
+    normalized_default = default.strip().lower()
+    default_index = 1
+    for index, (value, description) in enumerate(options, 1):
+        if value == normalized_default:
+            default_index = index
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        result = radiolist_dialog(
+            title="HiClaw setup",
+            text=label,
+            values=options,
+        ).run()
+        if result:
+            return str(result)
+        return options[default_index - 1][0]
+    print(label)
+    for index, (value, description) in enumerate(options, 1):
+        marker = " *" if value == normalized_default else ""
+        print(f"  {index}. {description}{marker}")
+    answer = input(f"请选择编号 [{default_index}]: ").strip().lower()
+    if not answer:
+        return options[default_index - 1][0]
+    if answer.isdigit():
+        index = int(answer)
+        if 1 <= index <= len(options):
+            return options[index - 1][0]
+    for value, _description in options:
+        if answer == value:
+            return value
+    print(f"无法识别选择，已使用默认项：{options[default_index - 1][1]}")
+    return options[default_index - 1][0]
+
+
 def _yes_no(label: str, default: bool = False) -> bool:
     marker = "Y/n" if default else "y/N"
     value = input(f"{label} [{marker}]: ").strip().lower()
@@ -332,17 +367,19 @@ def run_setup(args: argparse.Namespace) -> int:
     print("")
     print("第一步：配置模型 Provider")
     print("这里选择的是接口协议，不是只能用官方模型。")
-    print("- OpenAI-compatible：OpenAI 官方、DeepSeek、通义千问、硅基流动等兼容 /v1/chat/completions 的服务")
-    print("- Anthropic-compatible：Anthropic 官方或 Claude/Anthropic 兼容网关")
 
     provider_default = args.provider or _value(values, "AGENT_ROUTE") or _value(values, "AGENT_PROVIDER") or DEFAULTS["AGENT_ROUTE"]
     provider = normalize_provider(provider_default, default=DEFAULTS["AGENT_PROVIDER"])
     if provider not in {"claude", "openai"}:
         provider = normalize_provider(DEFAULTS["AGENT_PROVIDER"], default="openai")
     if not args.non_interactive:
-        provider = normalize_provider(
-            _prompt("选择接口协议 (openai_compatible/anthropic_compatible)", provider),
-            default=provider,
+        provider = _choose(
+            "请选择你手里的 API 属于哪一类：",
+            [
+                ("openai", "OpenAI 兼容接口，例如 OpenAI、DeepSeek、通义千问、硅基流动、OpenRouter"),
+                ("claude", "Anthropic / Claude 兼容接口，例如 Anthropic 官方或 Claude 兼容网关"),
+            ],
+            provider,
         )
     updates["AGENT_PROVIDER"] = provider
     updates["AGENT_ROUTE"] = provider
@@ -406,7 +443,16 @@ def run_setup(args: argparse.Namespace) -> int:
     print("")
     print("第二步：选择使用入口")
     if not channel and not args.non_interactive:
-        channel = _prompt("选择入口 (tui/telegram/feishu/none)", "tui").lower()
+        channel = _choose(
+            "请选择使用入口：",
+            [
+                ("tui", "本地 TUI（推荐先用这个测试模型）"),
+                ("telegram", "Telegram Bot"),
+                ("feishu", "Feishu 机器人"),
+                ("none", "暂不配置入口，只启动 dashboard"),
+            ],
+            "tui",
+        )
     channel = (channel or "none").lower()
     if channel == "tui":
         channel = "none"
@@ -610,7 +656,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     setup_parser = subparsers.add_parser("setup", help="交互式生成/更新 .env 配置")
     setup_parser.add_argument("--non-interactive", action="store_true", help="不提问，只根据参数和默认值写入 .env")
-    setup_parser.add_argument("--provider", choices=["openai", "openai_compatible", "claude", "anthropic_compatible"])
+    setup_parser.add_argument("--provider", choices=["openai", "openai_compatible", "claude", "anthropic", "anthropic_compatible"])
     setup_parser.add_argument("--profile-name")
     setup_parser.add_argument("--channel", choices=["tui", "telegram", "feishu", "none"])
     setup_parser.add_argument("--openai-api-key")
