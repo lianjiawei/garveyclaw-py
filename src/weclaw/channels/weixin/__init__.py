@@ -1,0 +1,1 @@
+"""Personal Weixin channel integration."""

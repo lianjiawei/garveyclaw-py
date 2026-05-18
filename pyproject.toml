@@ -10,11 +10,15 @@ requires-python = ">=3.12"
 
 dependencies = [
 
+    "aiohttp>=3.9.0",
+
     "aiosqlite>=0.22.1",
 
     "apscheduler>=3.10,<4.0",
 
     "claude-agent-sdk>=0.1.31",
+
+    "cryptography>=42.0.0",
 
     "croniter>=6.0.0",
 
@@ -27,6 +31,8 @@ dependencies = [
     "python-dotenv>=1.2.1",
 
     "python-telegram-bot>=22.6",
+
+    "qrcode>=8.0",
 
 ]
 
@@ -45,6 +51,7 @@ asr = [
 weclaw = "weclaw.cli:main"
 weclaw-tui = "weclaw.channels.tui:main"
 weclaw-feishu = "weclaw.channels.feishu.bot:main"
+weclaw-weixin = "weclaw.channels.weixin.bot:main"
 weclaw-dashboard = "weclaw.monitor.server:main"
 
 
@@ -70,6 +77,8 @@ packages = [
     "src/weclaw/channels/telegram",
 
     "src/weclaw/channels/feishu",
+
+    "src/weclaw/channels/weixin",
 
     "src/weclaw/cluster",
     "src/weclaw/core",

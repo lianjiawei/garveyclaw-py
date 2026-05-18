@@ -101,6 +101,16 @@ def build_feishu_conversation(incoming: "FeishuIncomingMessage", scope: str) -> 
     )
 
 
+def build_weixin_conversation(target_id: str, sender_id: str, chat_type: str = "dm") -> ConversationRef:
+    scope_kind = "group" if chat_type == "group" else "dm"
+    return ConversationRef(
+        channel="weixin",
+        target_id=target_id,
+        session_scope=f"weixin:{scope_kind}:{target_id}",
+        user_id=sender_id or None,
+    )
+
+
 
 
 
