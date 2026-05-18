@@ -17,7 +17,7 @@ import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import aiohttp
 from cryptography.hazmat.backends import default_backend
@@ -52,7 +52,8 @@ from weclaw.core.confirmation import (
     wait_for_pending_confirmation,
 )
 from weclaw.core.response import AgentReply
-from weclaw.media.store import save_uploaded_file
+from weclaw.media.speech import SpeechRecognitionError, transcribe_voice
+from weclaw.media.store import FilePayload, PhotoPayload, save_uploaded_file, save_voice_bytes
 from weclaw.memory.session import clear_session_id
 from weclaw.tasks.service import handle_task_command
 
@@ -213,8 +214,24 @@ def _aes128_ecb_encrypt(plaintext: bytes, key: bytes) -> bytes:
     return encryptor.update(_pkcs7_pad(plaintext)) + encryptor.finalize()
 
 
+def _aes128_ecb_decrypt(ciphertext: bytes, key: bytes) -> bytes:
+    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
+    decryptor = cipher.decryptor()
+    padded = decryptor.update(ciphertext) + decryptor.finalize()
+    if not padded:
+        return padded
+    pad_len = padded[-1]
+    if 1 <= pad_len <= 16 and padded.endswith(bytes([pad_len]) * pad_len):
+        return padded[:-pad_len]
+    return padded
+
+
 def _aes_padded_size(size: int) -> int:
     return ((size + 1 + 15) // 16) * 16
+
+
+def _cdn_download_url(cdn_base_url: str, encrypted_query_param: str) -> str:
+    return f"{cdn_base_url.rstrip('/')}/download?encrypted_query_param={quote(encrypted_query_param, safe='')}"
 
 
 def _cdn_upload_url(cdn_base_url: str, upload_param: str, filekey: str) -> str:
@@ -234,6 +251,121 @@ async def _upload_ciphertext(session: aiohttp.ClientSession, *, ciphertext: byte
                 return encrypted_param
         raw = await response.text()
         raise RuntimeError(f"Weixin CDN upload failed HTTP {response.status}: {raw[:200]}")
+
+
+async def _download_bytes(session: aiohttp.ClientSession, *, url: str, timeout_seconds: float = 60.0) -> bytes:
+    async def do_download() -> bytes:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            return await response.read()
+
+    return await asyncio.wait_for(do_download(), timeout=timeout_seconds)
+
+
+WEIXIN_MEDIA_HOST_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "novac2c.cdn.weixin.qq.com",
+        "ilinkai.weixin.qq.com",
+        "wx.qlogo.cn",
+        "thirdwx.qlogo.cn",
+        "res.wx.qq.com",
+        "mmbiz.qpic.cn",
+        "mmbiz.qlogo.cn",
+    }
+)
+
+
+def _assert_weixin_media_url(url: str) -> None:
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
+    host = parsed.hostname or ""
+    if scheme not in {"http", "https"}:
+        raise ValueError(f"Weixin media URL has unsupported scheme: {scheme}")
+    if host not in WEIXIN_MEDIA_HOST_ALLOWLIST:
+        raise ValueError(f"Weixin media URL host is not allowed: {host}")
+
+
+def _parse_aes_key(aes_key_value: str) -> bytes:
+    value = str(aes_key_value or "").strip()
+    if not value:
+        raise ValueError("empty aes_key")
+    if len(value) == 32 and all(ch in "0123456789abcdefABCDEF" for ch in value):
+        return bytes.fromhex(value)
+    decoded = base64.b64decode(value)
+    if len(decoded) == 16:
+        return decoded
+    if len(decoded) == 32:
+        text = decoded.decode("ascii", errors="ignore")
+        if text and all(ch in "0123456789abcdefABCDEF" for ch in text):
+            return bytes.fromhex(text)
+    raise ValueError(f"unexpected aes_key format: {len(decoded)} decoded bytes")
+
+
+def _media_reference(item: dict[str, Any], item_key: str) -> dict[str, Any]:
+    return (item.get(item_key) or {}).get("media") or {}
+
+
+def _has_downloadable_media(media: dict[str, Any]) -> bool:
+    return bool(
+        media.get("encrypt_query_param")
+        or media.get("encrypted_query_param")
+        or media.get("full_url")
+        or media.get("url")
+    )
+
+
+def _media_encrypt_query_param(media: dict[str, Any]) -> str | None:
+    value = media.get("encrypt_query_param") or media.get("encrypted_query_param")
+    return str(value) if value else None
+
+
+def _media_full_url(media: dict[str, Any]) -> str | None:
+    value = media.get("full_url") or media.get("url")
+    return str(value) if value else None
+
+
+def _media_suffix(*values: Any, default: str) -> str:
+    for value in values:
+        text = str(value or "").strip().lower()
+        if not text:
+            continue
+        if text.startswith(".") and 1 < len(text) <= 8:
+            return text
+        guessed = mimetypes.guess_extension(text)
+        if guessed:
+            return guessed
+        if "/" in text:
+            subtype = text.rsplit("/", 1)[-1]
+            if subtype in {"silk", "amr", "ogg", "opus", "mp3", "wav", "m4a"}:
+                return f".{subtype}"
+        if text in {"silk", "amr", "ogg", "opus", "mp3", "wav", "m4a"}:
+            return f".{text}"
+    return default
+
+
+async def _download_and_decrypt_media(
+    session: aiohttp.ClientSession,
+    *,
+    cdn_base_url: str,
+    encrypted_query_param: str | None,
+    aes_key: str | None,
+    full_url: str | None,
+    timeout_seconds: float,
+) -> bytes:
+    if encrypted_query_param:
+        raw = await _download_bytes(
+            session,
+            url=_cdn_download_url(cdn_base_url, encrypted_query_param),
+            timeout_seconds=timeout_seconds,
+        )
+    elif full_url:
+        _assert_weixin_media_url(full_url)
+        raw = await _download_bytes(session, url=full_url, timeout_seconds=timeout_seconds)
+    else:
+        raise RuntimeError("Weixin media item had neither encrypt_query_param nor full_url.")
+    if aes_key:
+        raw = _aes128_ecb_decrypt(raw, _parse_aes_key(aes_key))
+    return raw
 
 
 def _is_stale_session_ret(ret: Any, errcode: Any, errmsg: Any) -> bool:
@@ -615,6 +747,24 @@ class WeixinConfig:
     group_allowed_users: tuple[str, ...] = tuple(_coerce_list(WEIXIN_GROUP_ALLOWED_USERS))
 
 
+@dataclass(slots=True)
+class WeixinInboundMedia:
+    photo: PhotoPayload | None = None
+    file: FilePayload | None = None
+    voice_path: Path | None = None
+    voice_text: str = ""
+    errors: list[str] | None = None
+
+    def add_error(self, message: str) -> None:
+        if self.errors is None:
+            self.errors = []
+        self.errors.append(message)
+
+    @property
+    def has_media(self) -> bool:
+        return self.photo is not None or self.file is not None or self.voice_path is not None or bool(self.voice_text)
+
+
 class WeixinMessageSender:
     def __init__(
         self,
@@ -868,6 +1018,130 @@ class WeixinBot:
         except Exception as exc:
             logger.error("Unhandled Weixin inbound error from=%s: %s", message.get("from_user_id"), exc, exc_info=True)
 
+    async def _download_image(self, item: dict[str, Any]) -> PhotoPayload | None:
+        assert self._poll_session is not None
+        image_item = item.get("image_item") or {}
+        media = _media_reference(item, "image_item")
+        aes_key = ""
+        raw_aeskey = str(image_item.get("aeskey") or "").strip()
+        if raw_aeskey:
+            aes_key = raw_aeskey
+        else:
+            aes_key = str(media.get("aes_key") or "")
+        try:
+            data = await _download_and_decrypt_media(
+                self._poll_session,
+                cdn_base_url=self.config.cdn_base_url,
+                encrypted_query_param=_media_encrypt_query_param(media),
+                aes_key=aes_key,
+                full_url=_media_full_url(media),
+                timeout_seconds=30.0,
+            )
+            return PhotoPayload(data=data, mime_type="image/jpeg")
+        except Exception as exc:
+            logger.warning("Weixin image download failed: %s", exc)
+            return None
+
+    async def _download_file(self, item: dict[str, Any]) -> FilePayload | None:
+        assert self._poll_session is not None
+        file_item = item.get("file_item") or {}
+        media = file_item.get("media") or {}
+        filename = str(file_item.get("file_name") or "document.bin")
+        mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        try:
+            data = await _download_and_decrypt_media(
+                self._poll_session,
+                cdn_base_url=self.config.cdn_base_url,
+                encrypted_query_param=_media_encrypt_query_param(media),
+                aes_key=media.get("aes_key"),
+                full_url=_media_full_url(media),
+                timeout_seconds=60.0,
+            )
+            return save_uploaded_file(data, filename, mime_type)
+        except Exception as exc:
+            logger.warning("Weixin file download failed: %s", exc)
+            return None
+
+    async def _download_video(self, item: dict[str, Any]) -> FilePayload | None:
+        assert self._poll_session is not None
+        video_item = item.get("video_item") or {}
+        media = video_item.get("media") or {}
+        try:
+            data = await _download_and_decrypt_media(
+                self._poll_session,
+                cdn_base_url=self.config.cdn_base_url,
+                encrypted_query_param=_media_encrypt_query_param(media),
+                aes_key=media.get("aes_key"),
+                full_url=_media_full_url(media),
+                timeout_seconds=120.0,
+            )
+            return save_uploaded_file(data, "video.mp4", "video/mp4")
+        except Exception as exc:
+            logger.warning("Weixin video download failed: %s", exc)
+            return None
+
+    async def _download_voice(self, item: dict[str, Any]) -> Path | None:
+        assert self._poll_session is not None
+        voice_item = item.get("voice_item") or {}
+        media = voice_item.get("media") or {}
+        if not _has_downloadable_media(media):
+            return None
+        try:
+            data = await _download_and_decrypt_media(
+                self._poll_session,
+                cdn_base_url=self.config.cdn_base_url,
+                encrypted_query_param=_media_encrypt_query_param(media),
+                aes_key=media.get("aes_key"),
+                full_url=_media_full_url(media),
+                timeout_seconds=60.0,
+            )
+            suffix = _media_suffix(
+                voice_item.get("format"),
+                voice_item.get("file_format"),
+                voice_item.get("voice_format"),
+                media.get("mime_type"),
+                media.get("content_type"),
+                default=".silk",
+            )
+            return save_voice_bytes(data, suffix)
+        except Exception as exc:
+            logger.warning("Weixin voice download failed: %s", exc)
+            return None
+
+    async def _collect_media(self, item_list: list[dict[str, Any]]) -> WeixinInboundMedia:
+        result = WeixinInboundMedia()
+        for item in item_list:
+            item_type = item.get("type")
+            if item_type == ITEM_IMAGE and result.photo is None:
+                photo = await self._download_image(item)
+                if photo is not None:
+                    result.photo = photo
+                else:
+                    result.add_error("图片下载失败")
+            elif item_type == ITEM_FILE and result.file is None:
+                file_payload = await self._download_file(item)
+                if file_payload is not None:
+                    result.file = file_payload
+                else:
+                    result.add_error("文件下载失败")
+            elif item_type == ITEM_VIDEO and result.file is None:
+                video_payload = await self._download_video(item)
+                if video_payload is not None:
+                    result.file = video_payload
+                else:
+                    result.add_error("视频下载失败")
+            elif item_type == ITEM_VOICE:
+                voice_item = item.get("voice_item") or {}
+                if not result.voice_text:
+                    result.voice_text = str(voice_item.get("text") or "").strip()
+                if result.voice_path is None:
+                    voice_path = await self._download_voice(item)
+                    if voice_path is not None:
+                        result.voice_path = voice_path
+                    elif not result.voice_text:
+                        result.add_error("语音下载失败")
+        return result
+
     async def _process_message(self, message: dict[str, Any]) -> None:
         sender_id = str(message.get("from_user_id") or "").strip()
         if not sender_id or sender_id == self.config.account_id:
@@ -892,7 +1166,11 @@ class WeixinBot:
         context_token = str(message.get("context_token") or "").strip()
         if context_token:
             self.token_store.set(self.config.account_id, sender_id, context_token)
-        if not text:
+        media = await self._collect_media(item_list)
+        if not text and not media.has_media:
+            if media.errors:
+                assert self.sender is not None
+                await self.sender.send_text(target_id, "收到媒体消息，但下载失败：" + "；".join(media.errors))
             return
         conversation = build_weixin_conversation(target_id=target_id, sender_id=sender_id, chat_type=chat_type)
         pending = get_pending_confirmation(conversation.target_id)
@@ -918,24 +1196,66 @@ class WeixinBot:
                 message = "已确认，继续执行。" if approved else "已取消本次工具操作。"
             await self._send_agent_reply(conversation.target_id, AgentReply.from_text(message))
             return
-        if text.strip().lower() == "/reset":
+        if not media.has_media and text.strip().lower() == "/reset":
             clear_session_id(conversation.session_scope)
             await self._send_agent_reply(conversation.target_id, AgentReply.from_text("当前微信会话已重置。"))
             return
 
-        task_result = await handle_task_command(conversation, text)
-        if task_result.handled:
-            await self._send_agent_reply(conversation.target_id, AgentReply.from_text(task_result.message))
-            return
+        if not media.has_media:
+            task_result = await handle_task_command(conversation, text)
+            if task_result.handled:
+                await self._send_agent_reply(conversation.target_id, AgentReply.from_text(task_result.message))
+                return
 
         logger.info("Weixin inbound chat=%s sender=%s", target_id, sender_id)
         assert self.sender is not None
+        photo_payload = media.photo
+        file_payload = media.file
+        caption = text or "无"
+        if media.voice_path is not None or media.voice_text:
+            if media.voice_text:
+                transcript = media.voice_text
+            elif media.voice_path is not None:
+                try:
+                    transcript = transcribe_voice(media.voice_path)
+                except SpeechRecognitionError as exc:
+                    await self._send_agent_reply(conversation.target_id, AgentReply.from_text(f"语音已保存，但语音转文字失败：{exc}"))
+                    return
+            else:
+                transcript = ""
+            prompt = (
+                "用户发送了一条微信语音消息。\n"
+                f"语音本地路径：{media.voice_path or '(iLink only provided text)'}\n"
+                f"语音转写文本：{transcript}\n\n"
+                "请把这条语音转写文本当作用户的真实输入来处理。"
+            )
+            record_text = f"[Weixin] 用户发送了一条语音。转写：{transcript}"
+        elif file_payload is not None:
+            prompt = (
+                f"用户上传了一个微信文件：{file_payload.file_name}\n"
+                f"用户附带说明：{caption}\n\n"
+                f"文件已保存到：{file_payload.saved_path}\n"
+                "请使用 read_workspace_file 工具读取并分析该文件，然后直接给出有帮助的中文回答。"
+            )
+            record_text = f"[Weixin] 用户上传了一个文件：{file_payload.file_name}。说明：{caption}"
+        elif photo_payload is not None:
+            prompt = (
+                "用户上传了一张微信图片。\n"
+                f"用户附带说明：{caption}\n\n"
+                "请先调用 get_uploaded_image 工具获取本轮图片内容，再结合图片和用户说明进行分析，并直接给出有帮助的中文回答。"
+            )
+            record_text = f"[Weixin] 用户上传了一张图片。说明：{caption}"
+        else:
+            prompt = text
+            record_text = text
         reply = await run_agent_for_conversation(
-            prompt=text,
+            prompt=prompt,
             conversation=conversation,
             sender=self.sender,
             continue_session=True,
-            record_text=text,
+            record_text=record_text,
+            uploaded_image=photo_payload,
+            uploaded_file=file_payload,
         )
         await self._send_agent_reply(conversation.target_id, reply)
 
