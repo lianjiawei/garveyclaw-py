@@ -59,6 +59,8 @@ THEME_PRIMARY_BOLD = "1;38;2;199;125;43"
 THEME_SECONDARY = "38;2;154;143;133"
 THEME_MUTED = "38;2;111;102;94"
 THEME_SOFT = "38;2;221;214;207"
+THEME_OK = "38;2;72;187;120"
+THEME_WARN = "38;2;231;177;73"
 THEME_ERROR = "31;1"
 TUI_COLOR_MODE = (os.getenv("HICLAW_TUI_COLOR_MODE", "auto") or "auto").strip().lower()
 
@@ -92,6 +94,8 @@ if _is_compat_color_mode():
     THEME_SECONDARY = "37"
     THEME_MUTED = "90"
     THEME_SOFT = "37"
+    THEME_OK = "32"
+    THEME_WARN = "33"
     THEME_ERROR = "31;1"
 
 PROMPT_STYLE = Style.from_dict(
@@ -119,6 +123,7 @@ class CommandInfo:
 
 COMMANDS = [
     CommandInfo("/help", "查看帮助"),
+    CommandInfo("/palette", "打开命令面板"),
     CommandInfo("/status", "查看当前 TUI 状态"),
     CommandInfo("/clear", "清屏并重绘状态栏"),
     CommandInfo("/retry", "重发上一条用户输入"),
@@ -138,6 +143,14 @@ COMMANDS = [
     CommandInfo("/exit", "退出"),
 ]
 
+COMMAND_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Session", ("/status", "/clear", "/retry", "/reset", "/provider", "/model", "/exit")),
+    ("Input", ("/paste", "/plan")),
+    ("Capabilities", ("/skills", "/tools", "/workflows")),
+    ("Tasks", ("/schedule_in", "/tasks", "/cancel")),
+    ("Permissions", ("/grants", "/revoke")),
+)
+
 
 @dataclass(slots=True)
 class ConsoleBot:
@@ -155,25 +168,36 @@ class ConsoleBot:
             pause_event.set()
         try:
             detail_lines = [
+                color("工具请求正在等待你的确认。", THEME_WARN),
+                "",
                 request.prompt,
-                f"工具: {request.tool_name}",
-                f"类别: {request.category}",
-                f"风险: {request.risk_level}",
+                "",
+                f"Tool      {request.tool_name}",
+                f"Category  {request.category}",
+                f"Risk      {request.risk_level}",
             ]
             if request.summary:
-                detail_lines.append(f"摘要: {request.summary}")
-            detail_lines.append("输入“允许”仅执行一次；输入“本会话允许”后续本会话同工具自动执行；输入“拒绝”取消。")
-            print_message_block("Confirm", "\n".join(detail_lines), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Tool approval"), accent=THEME_PRIMARY)
-            answer = await asyncio.to_thread(input, color("确认执行? [允许/本会话允许/拒绝] ", THEME_PRIMARY_BOLD))
+                detail_lines.append(f"Summary   {request.summary}")
+            detail_lines.extend(
+                [
+                    "",
+                    "回复：允许 = 执行一次；本会话允许 = 本会话同工具自动执行；拒绝 = 取消。",
+                ]
+            )
+            print_message_block("Tool Approval", "\n".join(detail_lines), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Blocked"), accent=THEME_WARN)
+            answer = await asyncio.to_thread(input, color("确认执行? [允许/本会话允许/拒绝] ", THEME_WARN))
             decision = normalize_confirmation_reply(answer)
             if decision == "approve_session":
                 granted = grant_session_tool_access(request.session_scope, request)
                 if granted:
-                    print_message_block("Confirm", f"已记住当前会话对工具 {request.tool_name} 的自动授权。", subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Session grant"), accent=THEME_SECONDARY)
+                    print_message_block("Tool Approval", f"已记住当前会话对工具 {request.tool_name} 的自动授权。", subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Session grant"), accent=THEME_OK)
                 else:
-                    print_message_block("Confirm", "当前工具不支持会话级授权，已按单次确认执行。", subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Session grant"), accent=THEME_MUTED)
+                    print_message_block("Tool Approval", "当前工具不支持会话级授权，已按单次确认执行。", subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Session grant"), accent=THEME_MUTED)
                 return True
-            return decision == "approve_once"
+            approved = decision == "approve_once"
+            if not approved:
+                print_message_block("Tool Approval", f"已拒绝工具 {request.tool_name}，本次操作已取消。", subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Rejected"), accent=THEME_MUTED)
+            return approved
         finally:
             if pause_event is not None:
                 pause_event.clear()
@@ -307,26 +331,38 @@ def print_header() -> None:
     session_file = get_session_file(get_tui_scope())
     print(color(f"╭{rule}╮", THEME_SECONDARY))
     print(box_line_center("HiClaw TUI", width, THEME_PRIMARY_BOLD))
-    print(box_line_center("Local Agent Console", width, THEME_SECONDARY))
+    print(box_line_center("Local Agent Console · multi-agent workspace", width, THEME_SECONDARY))
     print(panel_line("Provider", get_provider(), width, "●", THEME_PRIMARY_BOLD))
     print(panel_line("Workspace", display_path(WORKSPACE_DIR), width, "◆", THEME_PRIMARY))
     print(panel_line("Session", display_path(session_file), width, "◦", THEME_PRIMARY))
     print(panel_line("Images", display_path(TUI_OUTPUT_DIR), width, "■", THEME_PRIMARY))
     print(color(f"├{rule}┤", THEME_SECONDARY))
-    print(box_line("Enter 发送；/paste 多行；/status 查看状态；/help 查看命令", width, THEME_MUTED))
-    print(box_line("/reset 清空会话；/clear 清屏；/retry 重发；/skills 技能；/tools 工具；/workflows 工作流；/exit 退出", width, THEME_MUTED))
+    print(box_line("Enter 发送 · /palette 命令面板 · /paste 多行输入 · /status 运行状态", width, THEME_MUTED))
+    print(box_line("/skills 技能 · /tools 工具 · /workflows 工作流 · /grants 授权 · /exit 退出", width, THEME_MUTED))
     print(color(f"╰{rule}╯", THEME_SECONDARY))
     print()
 
 
 def print_status_bar(state: TuiState) -> None:
     width = terminal_width()
-    rule = "─" * width
+    rule = "─" * (width - 2)
     instance_name = trim_middle(state.session_scope.split(":", 1)[-1], 20)
-    print(color(rule, THEME_MUTED))
-    print(color(f"[HiClaw] {state.provider.upper()} | {state.mode} | {instance_name}", THEME_PRIMARY_BOLD))
-    print(color(f"Dir: {display_path(WORKSPACE_DIR)}", THEME_SECONDARY))
-    print(color(rule, THEME_MUTED))
+    grants = list_session_tool_grants(state.session_scope)
+    latency = f"{state.last_latency_ms}ms" if state.last_latency_ms is not None else "-"
+    state_color = THEME_WARN if state.is_busy else THEME_OK
+    status_line = "  ".join(
+        [
+            f"mode={state.mode}",
+            f"provider={state.provider}",
+            f"model={get_effective_model(state.provider) or '-'}",
+            f"grants={len(grants)}",
+            f"latency={latency}",
+        ]
+    )
+    print(color(f"╭{rule}╮", THEME_MUTED))
+    print(box_line(f"● {status_line}", width, state_color))
+    print(box_line(f"workspace={display_path(WORKSPACE_DIR)}  session={instance_name}", width, THEME_SECONDARY))
+    print(color(f"╰{rule}╯", THEME_MUTED))
 
 
 def print_message_block(title: str, text: str, subtitle: str | None = None, accent: str = THEME_PRIMARY) -> None:
@@ -420,6 +456,25 @@ def format_command_suggestions(prefix: str, selected_index: int) -> list[str]:
     return lines
 
 
+def render_command_palette() -> str:
+    command_by_name = {command.name: command for command in COMMANDS}
+    lines: list[str] = [
+        "输入命令名称即可执行；输入命令前缀时会自动补全。",
+        "",
+    ]
+    for section, names in COMMAND_SECTIONS:
+        lines.append(color(section, THEME_PRIMARY_BOLD))
+        for name in names:
+            command = command_by_name.get(name)
+            if command is None:
+                continue
+            lines.append(f"  {pad_display(command.name, 14)} {command.description}")
+        lines.append("")
+    lines.append(color("Tips", THEME_PRIMARY_BOLD))
+    lines.append("  Tab/方向键可选择补全项；/paste 支持多行输入；/grants 可查看本会话工具授权。")
+    return "\n".join(lines).rstrip()
+
+
 def read_prompt() -> str:
     return pt_prompt(
         ANSI(color(PROMPT, THEME_PRIMARY_BOLD)),
@@ -458,43 +513,7 @@ def read_multiline() -> str:
 
 
 def print_help() -> None:
-    lines = [
-        "Session",
-        "/help       查看帮助",
-        "/status     查看当前 TUI 状态",
-        "/clear      清屏并重绘状态栏",
-        "/retry      重发上一条用户输入",
-        "/reset      清空当前连续会话",
-        "/provider   查看当前 Provider",
-        "/model      按 OpenAI-compatible / Anthropic-compatible 分组查看模型",
-        "/model use ID [模型名]    切换模型 Provider，可顺手覆盖模型名",
-        "/plan 文本   查看请求路由计划",
-        "/grants     查看本会话工具授权",
-        "/revoke 名   撤销某个工具授权",
-        "",
-        "Input",
-        "/paste      进入多行输入，支持 /preview /send /cancel",
-        "/exit       退出",
-        "↑/↓         回看历史输入（Windows 终端）",
-        "",
-        "Skills",
-        "/skills     查看可用技能列表",
-        "/skills 名   查看单个 skill 详情",
-        "",
-        "Tools",
-        "/tools      查看当前 Provider 可用工具",
-        "/tools 名    查看单个工具详情",
-        "",
-        "Workflows",
-        "/workflows  查看可用 workflow 列表",
-        "/workflows 名 查看单个 workflow 详情",
-        "",
-        "Tasks",
-        "/schedule_in 秒数 内容",
-        "/tasks",
-        "/cancel 任务ID",
-    ]
-    print_message_block("Commands", "\n".join(lines), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "TUI commands"), accent=THEME_PRIMARY)
+    print_message_block("Command Palette", render_command_palette(), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "TUI commands"), accent=THEME_PRIMARY)
 
 
 def print_status(state: TuiState) -> None:
@@ -688,7 +707,7 @@ async def run_tui() -> None:
             command = prompt.lower()
             if command in {"/exit", "/quit", "exit", "quit"}:
                 break
-            if command == "/help":
+            if command in {"/help", "/palette", "/commands"}:
                 print_help()
                 continue
             if command == "/clear":
@@ -838,6 +857,7 @@ async def run_tui() -> None:
             try:
                 record_input_history(prompt)
                 await submit_prompt(prompt, bot, state)
+                print_status_bar(state)
             except AgentServiceError as exc:
                 state.last_error = str(exc)
                 state.mode = TuiMode.NORMAL

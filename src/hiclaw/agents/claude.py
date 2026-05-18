@@ -17,6 +17,9 @@ from claude_agent_sdk import (
 from hiclaw.capabilities.tools import ToolContext, build_claude_allowed_tools
 from hiclaw.agents.tools import build_mcp_server
 from hiclaw.config import (
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_BASE_URL,
+    ANTHROPIC_MODEL,
     SHOW_TOOL_TRACE,
     WORKSPACE_DIR,
 )
@@ -38,6 +41,9 @@ logger = logging.getLogger(__name__)
 
 PROMPTS_DIR = WORKSPACE_DIR / "prompts"
 CLAUDE_BASE_ALLOWED_TOOLS: list[str] = []
+_DEFAULT_ANTHROPIC_API_KEY = ANTHROPIC_API_KEY
+_DEFAULT_ANTHROPIC_BASE_URL = ANTHROPIC_BASE_URL
+_DEFAULT_ANTHROPIC_MODEL = ANTHROPIC_MODEL
 
 
 class ClaudeServiceError(Exception):
@@ -48,23 +54,36 @@ class ClaudeConfigurationError(ClaudeServiceError):
     """表示 Claude Provider 缺少必要配置。"""
 
 
+def _resolve_claude_env_value(module_value: str | None, default_value: str | None, effective_value: str | None) -> str:
+    """Resolve patched module config first, then active model profile config."""
+
+    if module_value != default_value:
+        return str(module_value or "").strip()
+    if module_value is None:
+        return ""
+    value = str(module_value or "").strip()
+    if value:
+        return value
+    return str(effective_value or "").strip()
+
+
 def build_claude_env() -> dict[str, str]:
     """Build the Claude SDK environment and report missing config clearly."""
 
     missing: list[str] = []
     env: dict[str, str] = {}
 
-    api_key = get_effective_api_key("claude")
+    api_key = _resolve_claude_env_value(ANTHROPIC_API_KEY, _DEFAULT_ANTHROPIC_API_KEY, get_effective_api_key("claude"))
     if api_key:
         env["ANTHROPIC_API_KEY"] = api_key
     else:
         missing.append("ANTHROPIC_API_KEY")
 
-    base_url = get_effective_base_url("claude")
+    base_url = _resolve_claude_env_value(ANTHROPIC_BASE_URL, _DEFAULT_ANTHROPIC_BASE_URL, get_effective_base_url("claude"))
     if base_url:
         env["ANTHROPIC_BASE_URL"] = base_url
 
-    model = get_effective_model("claude")
+    model = _resolve_claude_env_value(ANTHROPIC_MODEL, _DEFAULT_ANTHROPIC_MODEL, get_effective_model("claude"))
     if model:
         env["ANTHROPIC_MODEL"] = model
 
@@ -74,7 +93,8 @@ def build_claude_env() -> dict[str, str]:
             "Claude Provider 配置不完整，缺少环境变量："
             f"{missing_text}。\n"
             "请在项目根目录 `.env` 中补齐配置后重启服务；如果暂时不用 Claude，"
-            "可以运行 `hiclaw model list` 查看可用配置，并用 `/model use <profile_id>` 切换。"
+            "可以设置 `AGENT_PROVIDER=openai`，或运行 `hiclaw model list` 查看可用配置，"
+            "并用 `/model use <profile_id>` 切换。"
         )
 
     return env
