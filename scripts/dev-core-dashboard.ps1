@@ -2,7 +2,7 @@ param(
     [int]$Port = 8765,
     [switch]$SkipBuild,
     [switch]$StopExisting,
-    [string]$PythonPath = "D:\anaconda3\envs\hiclaw\python.exe"
+    [string]$PythonPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,8 +31,22 @@ function Assert-Path {
 
 Set-Location $RepoRoot
 
-Assert-Path $PythonPath "Python not found: $PythonPath. Check the hiclaw conda env or pass -PythonPath."
 Assert-Path $CoreRoot "pixel-office-core directory not found: $CoreRoot"
+
+if ([string]::IsNullOrWhiteSpace($PythonPath)) {
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $pythonCommand) {
+        throw "Python was not found. Activate your Python environment first or pass -PythonPath."
+    }
+    $PythonPath = $pythonCommand.Source
+}
+elseif (-not (Test-Path $PythonPath)) {
+    $pythonCommand = Get-Command $PythonPath -ErrorAction SilentlyContinue
+    if (-not $pythonCommand) {
+        throw "Python not found: $PythonPath. Activate your Python environment first or pass -PythonPath."
+    }
+    $PythonPath = $pythonCommand.Source
+}
 
 Write-Step "Using Python"
 Write-Host $PythonPath
@@ -79,9 +93,9 @@ if ($listener) {
     }
 }
 
-$env:HICLAW_DASHBOARD_PORT = [string]$Port
+$env:WECLAW_DASHBOARD_PORT = [string]$Port
 
-Write-Step "Starting HiClaw Dashboard"
+Write-Step "Starting WeClaw Dashboard"
 Write-Host "Classic: http://127.0.0.1:$Port/"
 Write-Host "V2:      http://127.0.0.1:$Port/v2/"
 Write-Host "Core:    http://127.0.0.1:$Port/core/"
@@ -89,4 +103,4 @@ Write-Host ""
 Write-Host "Press Ctrl+C to stop the server."
 Write-Host ""
 
-& $PythonPath -m hiclaw.monitor.server
+& $PythonPath -m weclaw.monitor.server

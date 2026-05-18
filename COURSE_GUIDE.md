@@ -44,8 +44,8 @@
 推荐命令：
 
 ```powershell
-conda create -n hiclaw python=3.12 -y
-conda activate hiclaw
+conda create -n agent python=3.12 -y
+conda activate agent
 ```
 
 ### 2.3 依赖安装
@@ -531,7 +531,7 @@ python claw_course_bot.py
 
 正式工程入口：
 
-- [src/hiclaw/app.py](src/hiclaw/app.py)
+- [src/weclaw/app.py](src/weclaw/app.py)
 
 课程版的作用是：
 
@@ -554,4 +554,4 @@ python claw_course_bot.py
 
 如果你要真正维护项目，再回到：
 
-- [src/hiclaw](src/hiclaw)
+- [src/weclaw](src/weclaw)

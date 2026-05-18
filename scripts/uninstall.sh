@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_DIR="${HICLAW_INSTALL_DIR:-$HOME/.hiclaw/hiclaw-py}"
-BIN_DIR="${HICLAW_BIN_DIR:-$HOME/.local/bin}"
-KEEP_DATA="${HICLAW_KEEP_DATA:-0}"
+INSTALL_DIR="${WECLAW_INSTALL_DIR:-$HOME/.weclaw/weclaw}"
+BIN_DIR="${WECLAW_BIN_DIR:-$HOME/.local/bin}"
+KEEP_DATA="${WECLAW_KEEP_DATA:-0}"
 
 info() {
     printf '\033[1;36m==>\033[0m %s\n' "$1"
@@ -28,8 +28,8 @@ assert_safe_install_dir() {
         resolved="$INSTALL_DIR"
     fi
     case "$resolved" in
-        "/"|"$HOME"|"$HOME/"|"$HOME/.hiclaw"|"$HOME/.local"|"/opt"|"/usr"|"/usr/local"|"/tmp")
-            fail "Refusing to remove broad directory: $resolved. Set HICLAW_INSTALL_DIR to the exact HiClaw install path."
+        "/"|"$HOME"|"$HOME/"|"$HOME/.weclaw"|"$HOME/.local"|"/opt"|"/usr"|"/usr/local"|"/tmp")
+            fail "Refusing to remove broad directory: $resolved. Set WECLAW_INSTALL_DIR to the exact WeClaw install path."
             ;;
     esac
 }
@@ -51,18 +51,18 @@ remove_dir() {
 }
 
 main() {
-    info "Uninstalling HiClaw"
+    info "Uninstalling WeClaw"
     if [ "$KEEP_DATA" != "1" ]; then
         assert_safe_install_dir
     fi
 
-    remove_file "$BIN_DIR/hiclaw"
-    remove_file "$BIN_DIR/hiclaw-tui"
-    remove_file "$BIN_DIR/hiclaw-dashboard"
-    remove_file "$BIN_DIR/hiclaw-feishu"
+    remove_file "$BIN_DIR/weclaw"
+    remove_file "$BIN_DIR/weclaw-tui"
+    remove_file "$BIN_DIR/weclaw-dashboard"
+    remove_file "$BIN_DIR/weclaw-feishu"
 
     if [ "$KEEP_DATA" = "1" ]; then
-        warn "Keeping install directory because HICLAW_KEEP_DATA=1: $INSTALL_DIR"
+        warn "Keeping install directory because WECLAW_KEEP_DATA=1: $INSTALL_DIR"
     else
         remove_dir "$INSTALL_DIR"
     fi
@@ -73,8 +73,8 @@ main() {
     fi
 
     echo ""
-    info "HiClaw uninstall complete"
-    echo "If your shell still finds hiclaw, open a new terminal or remove stale PATH entries manually."
+    info "WeClaw uninstall complete"
+    echo "If your shell still finds weclaw, open a new terminal or remove stale PATH entries manually."
 }
 
 main "$@"

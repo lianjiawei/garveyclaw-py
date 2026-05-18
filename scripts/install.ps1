@@ -1,9 +1,9 @@
 $ErrorActionPreference = "Stop"
 
-$RepoUrl = if ($env:HICLAW_REPO_URL) { $env:HICLAW_REPO_URL } else { "https://github.com/lianjiawei/hiclaw-py.git" }
-$Branch = if ($env:HICLAW_BRANCH) { $env:HICLAW_BRANCH } else { "master" }
-$InstallDir = if ($env:HICLAW_INSTALL_DIR) { $env:HICLAW_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "HiClaw\hiclaw-py" }
-$BinDir = if ($env:HICLAW_BIN_DIR) { $env:HICLAW_BIN_DIR } else { Join-Path $env:USERPROFILE ".hiclaw\bin" }
+$RepoUrl = if ($env:WECLAW_REPO_URL) { $env:WECLAW_REPO_URL } else { "https://github.com/lianjiawei/weclaw.git" }
+$Branch = if ($env:WECLAW_BRANCH) { $env:WECLAW_BRANCH } else { "master" }
+$InstallDir = if ($env:WECLAW_INSTALL_DIR) { $env:WECLAW_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "WeClaw\weclaw" }
+$BinDir = if ($env:WECLAW_BIN_DIR) { $env:WECLAW_BIN_DIR } else { Join-Path $env:USERPROFILE ".weclaw\bin" }
 
 function Write-Step {
     param([string]$Message)
@@ -73,14 +73,14 @@ function Install-Repo {
     New-Item -ItemType Directory -Force -Path $parent | Out-Null
 
     if (Test-Path (Join-Path $InstallDir ".git")) {
-        Write-Step "Updating HiClaw at $InstallDir"
+        Write-Step "Updating WeClaw at $InstallDir"
         git -C $InstallDir fetch origin $Branch
         git -C $InstallDir checkout $Branch
         git -C $InstallDir pull --ff-only origin $Branch
     } elseif (Test-Path $InstallDir) {
-        Fail "$InstallDir already exists but is not a git repository. Set HICLAW_INSTALL_DIR to another path."
+        Fail "$InstallDir already exists but is not a git repository. Set WECLAW_INSTALL_DIR to another path."
     } else {
-        Write-Step "Cloning HiClaw into $InstallDir"
+        Write-Step "Cloning WeClaw into $InstallDir"
         git clone --branch $Branch $RepoUrl $InstallDir
     }
 }
@@ -127,10 +127,10 @@ function Write-CmdWrapper {
 
 function Install-Wrappers {
     Write-Step "Installing command wrappers into $BinDir"
-    Write-CmdWrapper "hiclaw"
-    Write-CmdWrapper "hiclaw-tui"
-    Write-CmdWrapper "hiclaw-dashboard"
-    Write-CmdWrapper "hiclaw-feishu"
+    Write-CmdWrapper "weclaw"
+    Write-CmdWrapper "weclaw-tui"
+    Write-CmdWrapper "weclaw-dashboard"
+    Write-CmdWrapper "weclaw-feishu"
 }
 
 function Ensure-UserPath {
@@ -155,18 +155,18 @@ function Main {
     Ensure-UserPath
 
     Write-Host ""
-    Write-Step "HiClaw installed successfully"
+    Write-Step "WeClaw installed successfully"
     Write-Host ""
     Write-Host "Next steps:"
-    Write-Host "  hiclaw setup"
-    Write-Host "  hiclaw doctor"
-    Write-Host "  hiclaw model list"
-    Write-Host "  hiclaw channel setup telegram   # optional, configure later"
-    Write-Host "  hiclaw run     # foreground mode on Windows"
-    Write-Host "  hiclaw start   # background mode on Linux/macOS/WSL2"
+    Write-Host "  weclaw setup"
+    Write-Host "  weclaw doctor"
+    Write-Host "  weclaw model list"
+    Write-Host "  weclaw channel setup telegram   # optional, configure later"
+    Write-Host "  weclaw run     # foreground mode on Windows"
+    Write-Host "  weclaw start   # background mode on Linux/macOS/WSL2"
     Write-Host ""
     Write-Host "If you are inside the source directory, this also works:"
-    Write-Host "  cd `"$InstallDir`"; python -m hiclaw doctor"
+    Write-Host "  cd `"$InstallDir`"; python -m weclaw doctor"
     Write-Host ""
     Write-Host "Install path:"
     Write-Host "  $InstallDir"

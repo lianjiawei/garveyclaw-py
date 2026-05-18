@@ -1,8 +1,8 @@
 $ErrorActionPreference = "Stop"
 
-$InstallDir = if ($env:HICLAW_INSTALL_DIR) { $env:HICLAW_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "HiClaw\hiclaw-py" }
-$BinDir = if ($env:HICLAW_BIN_DIR) { $env:HICLAW_BIN_DIR } else { Join-Path $env:USERPROFILE ".hiclaw\bin" }
-$KeepData = $env:HICLAW_KEEP_DATA -eq "1"
+$InstallDir = if ($env:WECLAW_INSTALL_DIR) { $env:WECLAW_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "WeClaw\weclaw" }
+$BinDir = if ($env:WECLAW_BIN_DIR) { $env:WECLAW_BIN_DIR } else { Join-Path $env:USERPROFILE ".weclaw\bin" }
+$KeepData = $env:WECLAW_KEEP_DATA -eq "1"
 
 function Write-Step {
     param([string]$Message)
@@ -25,10 +25,10 @@ function Assert-SafeInstallDir {
     $home = [System.IO.Path]::GetFullPath($env:USERPROFILE)
     $localAppData = [System.IO.Path]::GetFullPath($env:LOCALAPPDATA)
     $root = [System.IO.Path]::GetPathRoot($resolved)
-    $broadPaths = @($root, $home, $localAppData, (Join-Path $env:LOCALAPPDATA "HiClaw"), (Join-Path $env:USERPROFILE ".hiclaw"))
+    $broadPaths = @($root, $home, $localAppData, (Join-Path $env:LOCALAPPDATA "WeClaw"), (Join-Path $env:USERPROFILE ".weclaw"))
     foreach ($path in $broadPaths) {
         if ($resolved.TrimEnd("\") -ieq ([System.IO.Path]::GetFullPath($path)).TrimEnd("\")) {
-            Fail "Refusing to remove broad directory: $resolved. Set HICLAW_INSTALL_DIR to the exact HiClaw install path."
+            Fail "Refusing to remove broad directory: $resolved. Set WECLAW_INSTALL_DIR to the exact WeClaw install path."
         }
     }
 }
@@ -57,18 +57,18 @@ function Remove-UserPathEntry {
 }
 
 function Main {
-    Write-Step "Uninstalling HiClaw"
+    Write-Step "Uninstalling WeClaw"
     if (-not $KeepData) {
         Assert-SafeInstallDir
     }
 
-    Remove-PathIfExists (Join-Path $BinDir "hiclaw.cmd")
-    Remove-PathIfExists (Join-Path $BinDir "hiclaw-tui.cmd")
-    Remove-PathIfExists (Join-Path $BinDir "hiclaw-dashboard.cmd")
-    Remove-PathIfExists (Join-Path $BinDir "hiclaw-feishu.cmd")
+    Remove-PathIfExists (Join-Path $BinDir "weclaw.cmd")
+    Remove-PathIfExists (Join-Path $BinDir "weclaw-tui.cmd")
+    Remove-PathIfExists (Join-Path $BinDir "weclaw-dashboard.cmd")
+    Remove-PathIfExists (Join-Path $BinDir "weclaw-feishu.cmd")
 
     if ($KeepData) {
-        Write-Warn "Keeping install directory because HICLAW_KEEP_DATA=1: $InstallDir"
+        Write-Warn "Keeping install directory because WECLAW_KEEP_DATA=1: $InstallDir"
     } else {
         Remove-PathIfExists $InstallDir
         $parent = Split-Path -Parent $InstallDir
@@ -81,7 +81,7 @@ function Main {
     Remove-UserPathEntry $BinDir
 
     Write-Host ""
-    Write-Step "HiClaw uninstall complete"
+    Write-Step "WeClaw uninstall complete"
     Write-Host "Open a new PowerShell window if stale commands are still visible."
 }
 

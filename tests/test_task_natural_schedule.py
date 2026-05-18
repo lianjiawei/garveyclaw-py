@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hiclaw.tasks.scheduler import parse_natural_schedule
+from weclaw.tasks.scheduler import parse_natural_schedule
 
 
 def test_parse_natural_schedule_accepts_reminder_prefixes() -> None:
@@ -9,4 +9,3 @@ def test_parse_natural_schedule_accepts_reminder_prefixes() -> None:
     assert parsed is not None
     assert parsed.prompt == "提醒我喝水"
     assert parsed.schedule_type == "once"
-

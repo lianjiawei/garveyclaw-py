@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hiclaw.capabilities.tools import get_tool_spec
+from weclaw.capabilities.tools import get_tool_spec
 
 
 def test_current_conversation_task_and_message_tools_do_not_require_confirmation() -> None:

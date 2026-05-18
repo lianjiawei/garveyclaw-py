@@ -2,7 +2,7 @@
 
 ## Target
 
-HiClaw should evolve into a flexible Agent cluster platform:
+WeClaw should evolve into a flexible Agent cluster platform:
 
 - users can run one Agent directly
 - users can define custom Agents

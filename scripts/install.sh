@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="${HICLAW_REPO_URL:-https://github.com/lianjiawei/hiclaw-py.git}"
-BRANCH="${HICLAW_BRANCH:-master}"
-INSTALL_DIR="${HICLAW_INSTALL_DIR:-$HOME/.hiclaw/hiclaw-py}"
-BIN_DIR="${HICLAW_BIN_DIR:-$HOME/.local/bin}"
+REPO_URL="${WECLAW_REPO_URL:-https://github.com/lianjiawei/weclaw.git}"
+BRANCH="${WECLAW_BRANCH:-master}"
+INSTALL_DIR="${WECLAW_INSTALL_DIR:-$HOME/.weclaw/weclaw}"
+BIN_DIR="${WECLAW_BIN_DIR:-$HOME/.local/bin}"
 PYTHON_BIN="${PYTHON:-}"
 
 info() {
@@ -48,14 +48,14 @@ ensure_git() {
 install_repo() {
     mkdir -p "$(dirname "$INSTALL_DIR")"
     if [ -d "$INSTALL_DIR/.git" ]; then
-        info "Updating HiClaw at $INSTALL_DIR"
+        info "Updating WeClaw at $INSTALL_DIR"
         git -C "$INSTALL_DIR" fetch origin "$BRANCH"
         git -C "$INSTALL_DIR" checkout "$BRANCH"
         git -C "$INSTALL_DIR" pull --ff-only origin "$BRANCH"
     elif [ -e "$INSTALL_DIR" ]; then
-        fail "$INSTALL_DIR already exists but is not a git repository. Set HICLAW_INSTALL_DIR to another path."
+        fail "$INSTALL_DIR already exists but is not a git repository. Set WECLAW_INSTALL_DIR to another path."
     else
-        info "Cloning HiClaw into $INSTALL_DIR"
+        info "Cloning WeClaw into $INSTALL_DIR"
         git clone --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
     fi
 }
@@ -100,29 +100,29 @@ EOF
 
 write_wrappers() {
     info "Installing command wrappers into $BIN_DIR"
-    write_wrapper hiclaw
-    write_wrapper hiclaw-tui
-    write_wrapper hiclaw-dashboard
-    write_wrapper hiclaw-feishu
+    write_wrapper weclaw
+    write_wrapper weclaw-tui
+    write_wrapper weclaw-dashboard
+    write_wrapper weclaw-feishu
 }
 
 print_next_steps() {
     echo ""
-    info "HiClaw installed successfully"
+    info "WeClaw installed successfully"
     echo ""
     echo "Next steps:"
-    echo "  hiclaw setup"
-    echo "  hiclaw doctor"
-    echo "  hiclaw model list"
-    echo "  hiclaw channel setup telegram   # optional, configure later"
-    echo "  hiclaw start   # background mode on Linux/macOS/WSL2"
-    echo "  hiclaw run     # foreground mode"
+    echo "  weclaw setup"
+    echo "  weclaw doctor"
+    echo "  weclaw model list"
+    echo "  weclaw channel setup telegram   # optional, configure later"
+    echo "  weclaw start   # background mode on Linux/macOS/WSL2"
+    echo "  weclaw run     # foreground mode"
     echo ""
-    echo "If 'hiclaw' is not found, add this to your shell profile:"
+    echo "If 'weclaw' is not found, add this to your shell profile:"
     echo "  export PATH=\"$BIN_DIR:\$PATH\""
     echo ""
     echo "If you are inside the source directory, this also works:"
-    echo "  cd \"$INSTALL_DIR\" && python -m hiclaw doctor"
+    echo "  cd \"$INSTALL_DIR\" && python -m weclaw doctor"
     echo ""
     echo "Install path:"
     echo "  $INSTALL_DIR"

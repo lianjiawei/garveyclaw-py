@@ -1,6 +1,6 @@
-# HiClaw Py
+# WeClaw Py
 
-HiClaw Py 是一个面向长期运行、可扩展和可观测的多通道 AI Agent 工程。
+WeClaw Py 是一个面向长期运行、可扩展和可观测的多通道 AI Agent 工程。
 
 它当前已经具备：
 
@@ -68,7 +68,7 @@ HiClaw Py 是一个面向长期运行、可扩展和可观测的多通道 AI Age
 ## 工程结构
 
 ```text
-src/hiclaw/
+src/weclaw/
   app.py                    主启动入口
   config.py                 环境配置
 
@@ -116,25 +116,25 @@ scripts/                    Linux 启停脚本
 Linux / macOS / WSL2：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lianjiawei/hiclaw-py/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lianjiawei/weclaw/master/scripts/install.sh | bash
 ```
 
 Windows PowerShell：
 
 ```powershell
-irm https://raw.githubusercontent.com/lianjiawei/hiclaw-py/master/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/lianjiawei/weclaw/master/scripts/install.ps1 | iex
 ```
 
 ### 2. Configure
 
 ```bash
-hiclaw setup
+weclaw setup
 ```
 
 ### 3. Check
 
 ```bash
-hiclaw doctor
+weclaw doctor
 ```
 
 ### 4. Run
@@ -142,22 +142,22 @@ hiclaw doctor
 Linux / macOS / WSL2 后台运行，适合服务器长期在线：
 
 ```bash
-hiclaw start
-hiclaw status
-hiclaw logs -f
-hiclaw stop
+weclaw start
+weclaw status
+weclaw logs -f
+weclaw stop
 ```
 
 前台运行，适合本地调试或 Windows 原生环境：
 
 ```bash
-hiclaw run
+weclaw run
 ```
 
 本地 TUI 调试：
 
 ```bash
-hiclaw-tui
+weclaw-tui
 ```
 
 ### 5. Uninstall
@@ -165,32 +165,32 @@ hiclaw-tui
 Linux / macOS / WSL2：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lianjiawei/hiclaw-py/master/scripts/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lianjiawei/weclaw/master/scripts/uninstall.sh | bash
 ```
 
 Windows PowerShell：
 
 ```powershell
-irm https://raw.githubusercontent.com/lianjiawei/hiclaw-py/master/scripts/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/lianjiawei/weclaw/master/scripts/uninstall.ps1 | iex
 ```
 
 卸载脚本默认会删除：
 
-- HiClaw 安装目录
+- WeClaw 安装目录
 - 独立 Python 虚拟环境
-- `hiclaw` / `hiclaw-tui` / `hiclaw-dashboard` / `hiclaw-feishu` 命令包装器
-- Windows 用户 PATH 中的 HiClaw bin 目录
+- `weclaw` / `weclaw-tui` / `weclaw-dashboard` / `weclaw-feishu` 命令包装器
+- Windows 用户 PATH 中的 WeClaw bin 目录
 
 如果你想保留安装目录里的 `.env`、`data/`、`workspace/` 等本地数据：
 
 ```bash
-HICLAW_KEEP_DATA=1 curl -fsSL https://raw.githubusercontent.com/lianjiawei/hiclaw-py/master/scripts/uninstall.sh | bash
+WECLAW_KEEP_DATA=1 curl -fsSL https://raw.githubusercontent.com/lianjiawei/weclaw/master/scripts/uninstall.sh | bash
 ```
 
 PowerShell：
 
 ```powershell
-$env:HICLAW_KEEP_DATA="1"; irm https://raw.githubusercontent.com/lianjiawei/hiclaw-py/master/scripts/uninstall.ps1 | iex
+$env:WECLAW_KEEP_DATA="1"; irm https://raw.githubusercontent.com/lianjiawei/weclaw/master/scripts/uninstall.ps1 | iex
 ```
 
 ## Website
@@ -221,28 +221,28 @@ http://127.0.0.1:8080
 
 一键安装脚本默认会：
 
-- 克隆项目到 `~/.hiclaw/hiclaw-py`（Windows 为 `%LOCALAPPDATA%\HiClaw\hiclaw-py`）
+- 克隆项目到 `~/.weclaw/weclaw`（Windows 为 `%LOCALAPPDATA%\WeClaw\weclaw`）
 - 创建独立 Python 虚拟环境
-- 安装 `hiclaw`、`hiclaw-tui`、`hiclaw-dashboard`、`hiclaw-feishu` 命令
+- 安装 `weclaw`、`weclaw-tui`、`weclaw-dashboard`、`weclaw-feishu` 命令
 - 如果检测到 npm，自动构建 `pixel-office-core`
 
 可通过环境变量自定义安装：
 
 ```bash
-HICLAW_INSTALL_DIR=/opt/hiclaw HICLAW_BRANCH=master curl -fsSL https://raw.githubusercontent.com/lianjiawei/hiclaw-py/master/scripts/install.sh | bash
+WECLAW_INSTALL_DIR=/opt/weclaw WECLAW_BRANCH=master curl -fsSL https://raw.githubusercontent.com/lianjiawei/weclaw/master/scripts/install.sh | bash
 ```
 
 PowerShell：
 
 ```powershell
-$env:HICLAW_INSTALL_DIR="$env:USERPROFILE\Apps\HiClaw"; irm https://raw.githubusercontent.com/lianjiawei/hiclaw-py/master/scripts/install.ps1 | iex
+$env:WECLAW_INSTALL_DIR="$env:USERPROFILE\Apps\WeClaw"; irm https://raw.githubusercontent.com/lianjiawei/weclaw/master/scripts/install.ps1 | iex
 ```
 
 ### 1. 克隆仓库
 
 ```bash
-git clone git@github.com:lianjiawei/hiclaw-py.git
-cd hiclaw-py
+git clone git@github.com:lianjiawei/weclaw.git
+cd weclaw
 ```
 
 ### 2. 创建 Python 环境
@@ -269,8 +269,8 @@ python -m venv .venv
 Conda 仅作为本地开发可选项：
 
 ```bash
-conda create -n hiclaw python=3.12 -y
-conda activate hiclaw
+conda create -n agent python=3.12 -y
+conda activate agent
 ```
 
 ### 3. 安装依赖
@@ -309,27 +309,27 @@ cd ..
 新用户推荐直接运行初始化向导，它会自动创建 `.env`，并引导你选择 Provider、消息通道和 dashboard 监听地址：
 
 ```bash
-hiclaw setup
+weclaw setup
 ```
 
 检查当前配置是否满足启动条件：
 
 ```bash
-hiclaw doctor
+weclaw doctor
 ```
 
 ### 1.1 后续补充配置
 
-安装脚本会提供 `hiclaw` 命令，后续推荐优先使用：
+安装脚本会提供 `weclaw` 命令，后续推荐优先使用：
 
 ```bash
-hiclaw doctor
-hiclaw setup
-hiclaw model list
-hiclaw channel setup telegram
+weclaw doctor
+weclaw setup
+weclaw model list
+weclaw channel setup telegram
 ```
 
-如果服务器提示 `hiclaw: command not found`，通常是 `~/.local/bin` 没进 PATH：
+如果服务器提示 `weclaw: command not found`，通常是 `~/.local/bin` 没进 PATH：
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -338,36 +338,36 @@ export PATH="$HOME/.local/bin:$PATH"
 如果你在源码目录里，也可以直接运行：
 
 ```bash
-cd ~/.hiclaw/hiclaw-py
-python -m hiclaw doctor
+cd ~/.weclaw/weclaw
+python -m weclaw doctor
 ```
 
 常见补配置命令：
 
 ```bash
 # 增加一个 OpenAI-compatible 模型服务
-hiclaw model add --protocol openai --name deepseek --api-key xxx --base-url https://.../v1 --model deepseek-chat
+weclaw model add --protocol openai --name deepseek --api-key xxx --base-url https://.../v1 --model deepseek-chat
 
 # 增加一个 Anthropic-compatible 模型服务
-hiclaw model add --protocol claude --name my-claude-gateway --api-key xxx --base-url https://... --model claude-sonnet-4
+weclaw model add --protocol claude --name my-claude-gateway --api-key xxx --base-url https://... --model claude-sonnet-4
 
 # 切换当前模型服务
-hiclaw model use deepseek
+weclaw model use deepseek
 
 # 后续再配置 Telegram / Feishu
-hiclaw channel setup telegram
-hiclaw channel setup feishu
+weclaw channel setup telegram
+weclaw channel setup feishu
 
 # 关闭机器人通道，仅保留 TUI / dashboard
-hiclaw channel setup none
+weclaw channel setup none
 
 # 搜索增强：可选；不配置也能回退到默认轻量搜索
-hiclaw config set TAVILY_API_KEY=tvly-xxx
+weclaw config set TAVILY_API_KEY=tvly-xxx
 ```
 
 ### 1.2 多 Provider 与多模型配置
 
-HiClaw 的模型配置分成两个概念：
+WeClaw 的模型配置分成两个概念：
 
 - `protocol`：接口协议类型，不是固定厂商。当前支持 `openai` 和 `claude`。
 - `profile`：你保存的一组模型服务配置，包含名称、协议、API Key、Base URL 和模型名。
@@ -378,21 +378,21 @@ HiClaw 的模型配置分成两个概念：
 
 配置文件关系：
 
-- `data/model_profiles.json` 保存多个模型服务配置，是 `/model` 和 `hiclaw model ...` 的 profile 列表来源。
+- `data/model_profiles.json` 保存多个模型服务配置，是 `/model` 和 `weclaw model ...` 的 profile 列表来源。
 - `.env` 保存当前激活模型的兼容镜像，例如 `MODEL_PROFILE_NAME`、`AGENT_ROUTE`、`OPENAI_MODEL` / `ANTHROPIC_MODEL`。
 - `MODEL_PROFILE_NAME` 表示当前激活的 profile id。
-- 使用 `hiclaw setup`、`hiclaw model add`、`hiclaw model use` 或 `/model use` 切换时，会同步更新 `.env`。
+- 使用 `weclaw setup`、`weclaw model add`、`weclaw model use` 或 `/model use` 切换时，会同步更新 `.env`。
 
 查看当前有哪些模型服务：
 
 ```bash
-hiclaw model list
+weclaw model list
 ```
 
 添加一个 OpenAI-compatible 服务，例如 DeepSeek：
 
 ```bash
-hiclaw model add \
+weclaw model add \
   --protocol openai \
   --name deepseek \
   --api-key sk-xxx \
@@ -403,7 +403,7 @@ hiclaw model add \
 添加一个 OpenAI-compatible 服务，例如通义千问：
 
 ```bash
-hiclaw model add \
+weclaw model add \
   --protocol openai \
   --name qwen \
   --api-key sk-xxx \
@@ -414,7 +414,7 @@ hiclaw model add \
 添加一个 Anthropic / Claude-compatible 服务：
 
 ```bash
-hiclaw model add \
+weclaw model add \
   --protocol claude \
   --name claude-gateway \
   --api-key sk-xxx \
@@ -425,13 +425,13 @@ hiclaw model add \
 切换当前默认模型服务：
 
 ```bash
-hiclaw model use deepseek
+weclaw model use deepseek
 ```
 
 切换时顺便改模型名：
 
 ```bash
-hiclaw model use qwen qwen-max
+weclaw model use qwen qwen-max
 ```
 
 在 TUI、Telegram 或 Feishu 里也可以用统一的 `/model` 命令：
@@ -442,14 +442,14 @@ hiclaw model use qwen qwen-max
 /model use qwen qwen-max
 ```
 
-如果你只是临时换模型，推荐用 `/model use ...` 或 `hiclaw model use ...`；如果你要新增一个服务商或网关，推荐用 `hiclaw model add ...`。
+如果你只是临时换模型，推荐用 `/model use ...` 或 `weclaw model use ...`；如果你要新增一个服务商或网关，推荐用 `weclaw model add ...`。
 
 也可以用命令行直接写入配置，适合服务器或脚本化部署：
 
 ```bash
-hiclaw config set AGENT_PROVIDER=openai OPENAI_API_KEY=sk-xxx
-hiclaw config set TELEGRAM_BOT_TOKEN=xxx OWNER_ID=123456
-hiclaw config set HICLAW_DASHBOARD_HOST=0.0.0.0 HICLAW_DASHBOARD_PORT=8765
+weclaw config set AGENT_PROVIDER=openai OPENAI_API_KEY=sk-xxx
+weclaw config set TELEGRAM_BOT_TOKEN=xxx OWNER_ID=123456
+weclaw config set WECLAW_DASHBOARD_HOST=0.0.0.0 WECLAW_DASHBOARD_PORT=8765
 ```
 
 读取配置时默认会隐藏 `KEY` / `TOKEN` / `SECRET` / `PASSWORD` 类字段；排查问题时确实需要完整值，可以加 `--show-secrets`。
@@ -457,7 +457,7 @@ hiclaw config set HICLAW_DASHBOARD_HOST=0.0.0.0 HICLAW_DASHBOARD_PORT=8765
 如果你只想本地调试，不需要 Telegram / Feishu，可以运行：
 
 ```bash
-hiclaw-tui
+weclaw-tui
 ```
 
 ### 2. 手动复制配置模板
@@ -500,7 +500,7 @@ TAVILY_API_KEY=
 
 说明：
 
-- `hiclaw-tui` 不依赖 Telegram 或 Feishu
+- `weclaw-tui` 不依赖 Telegram 或 Feishu
 - `TAVILY_API_KEY` 是可选搜索增强；留空时会使用默认轻量搜索，质量、时效性和访问频率可能有限
 
 #### 方案 B：Telegram Bot
@@ -536,8 +536,8 @@ WORKSPACE_DIR=./workspace
 
 ```env
 # Dashboard
-HICLAW_DASHBOARD_HOST=0.0.0.0
-HICLAW_DASHBOARD_PORT=8765
+WECLAW_DASHBOARD_HOST=0.0.0.0
+WECLAW_DASHBOARD_PORT=8765
 
 # Scheduler
 SCHEDULER_INTERVAL_SECONDS=30
@@ -555,7 +555,7 @@ CAPABILITY_WATCHER_INTERVAL_SECONDS=1.0
 
 说明：
 
-- 云服务器上想从公网访问 dashboard，`HICLAW_DASHBOARD_HOST` 应设为 `0.0.0.0`
+- 云服务器上想从公网访问 dashboard，`WECLAW_DASHBOARD_HOST` 应设为 `0.0.0.0`
 - `SHOW_TOOL_TRACE=1` 适合调试
 - `TAVILY_API_KEY` 控制 `web_search` 能力；不需要联网搜索时可以留空
 
@@ -581,7 +581,7 @@ AGENT_CLUSTER_MAX_EVENTS=40
 ### 方式 1：本地 TUI
 
 ```bash
-hiclaw-tui
+weclaw-tui
 ```
 
 适合：
@@ -593,13 +593,13 @@ hiclaw-tui
 ### 方式 2：前台运行
 
 ```bash
-hiclaw run
+weclaw run
 ```
 
 如果你在源码目录里临时调试，也可以用：
 
 ```bash
-python -m hiclaw run
+python -m weclaw run
 ```
 
 说明：
@@ -608,46 +608,46 @@ python -m hiclaw run
 - 也会同时启动 dashboard server
 - 终端关闭后服务会停止
 - 适合本地调试、Windows 原生环境，或交给 systemd/supervisor/docker 这类外部进程管理器托管
-- 如果没有配置 Telegram 或 Feishu，这个入口会直接报错；此时请使用 `hiclaw-tui`
+- 如果没有配置 Telegram 或 Feishu，这个入口会直接报错；此时请使用 `weclaw-tui`
 
 ### 方式 3：后台运行
 
 ```bash
-hiclaw start
+weclaw start
 ```
 
 查看后台状态：
 
 ```bash
-hiclaw status
+weclaw status
 ```
 
 查看日志：
 
 ```bash
-hiclaw logs
-hiclaw logs -f
+weclaw logs
+weclaw logs -f
 ```
 
 停止后台服务：
 
 ```bash
-hiclaw stop
+weclaw stop
 ```
 
 说明：
 
-- `hiclaw start` 等价于仓库内的 `scripts/start.sh`
-- `hiclaw stop` 等价于仓库内的 `scripts/stop.sh`
-- 后台模式会写入 `data/hiclaw.pid` 和 `data/hiclaw.log`
-- `hiclaw status` 检查 PID 是否还活着，并显示日志位置和 dashboard 地址
-- `hiclaw logs -f` 用于实时查看后台日志
+- `weclaw start` 等价于仓库内的 `scripts/start.sh`
+- `weclaw stop` 等价于仓库内的 `scripts/stop.sh`
+- 后台模式会写入 `data/weclaw.pid` 和 `data/weclaw.log`
+- `weclaw status` 检查 PID 是否还活着，并显示日志位置和 dashboard 地址
+- `weclaw logs -f` 用于实时查看后台日志
 - 适合 Linux / macOS / WSL2 服务器长期运行
 
 当前后台启动会做这些事：
 
-- 运行 `hiclaw doctor` 做启动前配置检查
-- 启动 HiClaw 主应用
+- 运行 `weclaw doctor` 做启动前配置检查
+- 启动 WeClaw 主应用
 - 检查 `.env` 中的 dashboard host / port
 - 自动输出 dashboard 访问地址
 - 检查 `/api/activity` 健康状态
@@ -664,13 +664,13 @@ hiclaw stop
 ### 方式 4：单独启动 Dashboard
 
 ```bash
-hiclaw-dashboard
+weclaw-dashboard
 ```
 
 ### 方式 5：只启动 Feishu 通道
 
 ```bash
-hiclaw-feishu
+weclaw-feishu
 ```
 
 ## 访问地址
@@ -685,7 +685,7 @@ hiclaw-feishu
 
 云服务器访问：
 
-- 将 `HICLAW_DASHBOARD_HOST=0.0.0.0`
+- 将 `WECLAW_DASHBOARD_HOST=0.0.0.0`
 - 开放安全组 / 防火墙端口 `8765`
 
 ## 云服务器 Linux 部署教程
@@ -715,15 +715,15 @@ sudo apt install -y nodejs npm
 ### 2. 拉取代码
 
 ```bash
-git clone git@github.com:lianjiawei/hiclaw-py.git
-cd hiclaw-py
+git clone git@github.com:lianjiawei/weclaw.git
+cd weclaw
 ```
 
 如果你的服务器没有配置 SSH key，也可以使用 HTTPS：
 
 ```bash
-git clone https://github.com/lianjiawei/hiclaw-py.git
-cd hiclaw-py
+git clone https://github.com/lianjiawei/weclaw.git
+cd weclaw
 ```
 
 ### 3. 创建虚拟环境并安装依赖
@@ -746,8 +746,8 @@ python -m pip install -e ".[asr]"
 推荐先运行：
 
 ```bash
-hiclaw setup
-hiclaw doctor
+weclaw setup
+weclaw doctor
 ```
 
 如果你手动编辑 `.env`，至少需要修改这些项：
@@ -763,8 +763,8 @@ ANTHROPIC_MODEL=
 
 TAVILY_API_KEY=
 
-HICLAW_DASHBOARD_HOST=0.0.0.0
-HICLAW_DASHBOARD_PORT=8765
+WECLAW_DASHBOARD_HOST=0.0.0.0
+WECLAW_DASHBOARD_PORT=8765
 
 WORKSPACE_DIR=./workspace
 ```
@@ -785,9 +785,9 @@ FEISHU_APP_SECRET=your_feishu_app_secret_here
 
 重要说明：
 
-- `hiclaw run` 启动前会检查关键配置，缺少 Provider key 或消息通道时会给出修复建议
-- 如果你只是想在服务器上先验证工具和模型，不配 Telegram / Feishu 时请用 `hiclaw-tui`
-- 如果你要公网访问 dashboard，`HICLAW_DASHBOARD_HOST` 必须设为 `0.0.0.0`
+- `weclaw run` 启动前会检查关键配置，缺少 Provider key 或消息通道时会给出修复建议
+- 如果你只是想在服务器上先验证工具和模型，不配 Telegram / Feishu 时请用 `weclaw-tui`
+- 如果你要公网访问 dashboard，`WECLAW_DASHBOARD_HOST` 必须设为 `0.0.0.0`
 
 ### 5. 开放端口
 
@@ -821,8 +821,8 @@ sudo ufw status
 
 `start.sh` 当前会：
 
-- 运行当前 HiClaw 命令所在 Python 的 `hiclaw doctor` 做启动前配置检查
-- 使用同一个 Python 启动 HiClaw 主进程
+- 运行当前 WeClaw 命令所在 Python 的 `weclaw doctor` 做启动前配置检查
+- 使用同一个 Python 启动 WeClaw 主进程
 - 读取 `.env` 中的 dashboard host / port
 - 打印公网访问地址
 - 检查 `/api/activity` 健康状态
@@ -849,13 +849,13 @@ Core Dashboard: http://<your-ip>:8765/core
 日志文件默认在：
 
 ```bash
-data/hiclaw.log
+data/weclaw.log
 ```
 
 实时查看：
 
 ```bash
-tail -f data/hiclaw.log
+tail -f data/weclaw.log
 ```
 
 ### 9. 常见问题排查
@@ -864,14 +864,14 @@ tail -f data/hiclaw.log
 
 先检查：
 
-- `.env` 里是否设置了 `HICLAW_DASHBOARD_HOST=0.0.0.0`
+- `.env` 里是否设置了 `WECLAW_DASHBOARD_HOST=0.0.0.0`
 - 云服务器安全组是否放行 `8765`
 - 系统防火墙是否放行 `8765`
 
 再检查服务日志：
 
 ```bash
-tail -n 100 data/hiclaw.log
+tail -n 100 data/weclaw.log
 ```
 
 #### 2. `/core` 页面能打开但素材加载失败
@@ -914,8 +914,8 @@ TAVILY_API_KEY=your_tavily_api_key_here
 
 解决方式：
 
-- 配置 Telegram 或 Feishu 后再运行 `hiclaw run`
-- 或改为使用本地 `hiclaw-tui`
+- 配置 Telegram 或 Feishu 后再运行 `weclaw run`
+- 或改为使用本地 `weclaw-tui`
 
 ### 10. 更新代码
 
@@ -954,7 +954,7 @@ TAVILY_MAX_RESULTS=5
 - `src/` 源码
 - `dist/` 构建产物
 - `public/assets/` 素材资源
-- `hiclaw-dashboard.html/js` 入口文件
+- `weclaw-dashboard.html/js` 入口文件
 
 `/core` 页面直接由 `monitor/server.py` 映射为静态资源，不需要单独再启动一个 Node 服务。
 
@@ -971,14 +971,14 @@ TAVILY_MAX_RESULTS=5
 - 优先参考 `pixel-agents` 的既有素材组织和渲染分层
 - 优先参考其角色移动、路径、站位、工位行为逻辑
 - 优先参考其状态动画、气泡提示、家具交互和空间表达方式
-- 在其成熟逻辑基础上做 HiClaw 的 `planner / executor / reviewer` 状态映射
+- 在其成熟逻辑基础上做 WeClaw 的 `planner / executor / reviewer` 状态映射
 - 尽量避免脱离参考项目而单独发明一整套新的办公室行为系统
 
 也就是说，后续 `/core` 的优化方向应当是：
 
 - 先对照 `pixel-agents`
 - 再做稳定迁移
-- 最后做 HiClaw 的多 Agent 状态适配
+- 最后做 WeClaw 的多 Agent 状态适配
 
 ## 测试
 

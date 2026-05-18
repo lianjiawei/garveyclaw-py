@@ -3,12 +3,12 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PID_FILE="$PROJECT_DIR/data/hiclaw.pid"
-LOG_FILE="$PROJECT_DIR/data/hiclaw.log"
+PID_FILE="$PROJECT_DIR/data/weclaw.pid"
+LOG_FILE="$PROJECT_DIR/data/weclaw.log"
 ENV_FILE="$PROJECT_DIR/.env"
-PYTHON_BIN="${HICLAW_PYTHON:-python}"
+PYTHON_BIN="${WECLAW_PYTHON:-python}"
 CORE_DIR="$PROJECT_DIR/pixel-office-core"
-CORE_DASHBOARD_FILE="$PROJECT_DIR/pixel-office-core/hiclaw-dashboard.html"
+CORE_DASHBOARD_FILE="$PROJECT_DIR/pixel-office-core/weclaw-dashboard.html"
 CORE_DIST_ENTRY="$PROJECT_DIR/pixel-office-core/dist/index.js"
 
 cd "$PROJECT_DIR"
@@ -17,7 +17,7 @@ mkdir -p "$PROJECT_DIR/data"
 if [ -f "$PID_FILE" ]; then
     OLD_PID=$(cat "$PID_FILE")
     if kill -0 "$OLD_PID" 2>/dev/null; then
-        echo "HiClaw is already running (PID $OLD_PID)."
+        echo "WeClaw is already running (PID $OLD_PID)."
         exit 1
     fi
     rm -f "$PID_FILE"
@@ -57,8 +57,8 @@ DASHBOARD_HOST="127.0.0.1"
 DASHBOARD_PORT="8765"
 
 if [ -f "$ENV_FILE" ]; then
-    env_host=$(grep -E "^HICLAW_DASHBOARD_HOST=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
-    env_port=$(grep -E "^HICLAW_DASHBOARD_PORT=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    env_host=$(grep -E "^WECLAW_DASHBOARD_HOST=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    env_port=$(grep -E "^WECLAW_DASHBOARD_PORT=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
     [ -n "$env_host" ] && DASHBOARD_HOST="$env_host"
     [ -n "$env_port" ] && DASHBOARD_PORT="$env_port"
 fi
@@ -77,21 +77,21 @@ if [ "$DASHBOARD_HOST" = "0.0.0.0" ] || [ "$DASHBOARD_HOST" = "127.0.0.1" ]; the
     fi
 fi
 
-echo "Starting HiClaw..."
-if ! "$PYTHON_BIN" -c "import hiclaw" >/dev/null 2>&1; then
-    echo "HiClaw is not installed in this Python environment: $PYTHON_BIN"
+echo "Starting WeClaw..."
+if ! "$PYTHON_BIN" -c "import weclaw" >/dev/null 2>&1; then
+    echo "WeClaw is not installed in this Python environment: $PYTHON_BIN"
     echo "Run one of these first:"
     echo "  python -m pip install -e ."
-    echo "  curl -fsSL https://raw.githubusercontent.com/lianjiawei/hiclaw-py/master/scripts/install.sh | bash"
+    echo "  curl -fsSL https://raw.githubusercontent.com/lianjiawei/weclaw/master/scripts/install.sh | bash"
     exit 1
 fi
-if ! "$PYTHON_BIN" -m hiclaw doctor; then
+if ! "$PYTHON_BIN" -m weclaw doctor; then
     echo ""
-    echo "HiClaw configuration is incomplete. Run this setup wizard first:"
-    echo "  hiclaw setup"
+    echo "WeClaw configuration is incomplete. Run this setup wizard first:"
+    echo "  weclaw setup"
     exit 1
 fi
-nohup "$PYTHON_BIN" -m hiclaw >> "$LOG_FILE" 2>&1 &
+nohup "$PYTHON_BIN" -m weclaw >> "$LOG_FILE" 2>&1 &
 PID=$!
 echo "$PID" > "$PID_FILE"
 

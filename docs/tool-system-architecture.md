@@ -2,12 +2,12 @@
 
 ## Goal
 
-Provide one durable architecture for HiClaw tool capabilities so Claude MCP, OpenAI function calling, future workflows, and user-defined tools can extend from the same source of truth.
+Provide one durable architecture for WeClaw tool capabilities so Claude MCP, OpenAI function calling, future workflows, and user-defined tools can extend from the same source of truth.
 
 ## Current Target State
 
 ### 1. Shared Registry
-- All tool capabilities are registered in `src/hiclaw/capabilities/tools.py`.
+- All tool capabilities are registered in `src/weclaw/capabilities/tools.py`.
 - Capability source files now live outside runtime code:
   - workflow definitions in `capabilities/workflows/`
   - future external tool definitions in `capabilities/tools/`
@@ -35,11 +35,11 @@ Provide one durable architecture for HiClaw tool capabilities so Claude MCP, Ope
 
 ### 3. Thin Provider Adapters
 - Claude:
-  - `src/hiclaw/agents/tools.py`
+  - `src/weclaw/agents/tools.py`
   - builds MCP wrappers from registry entries
   - generates allowlist from registry automatically
 - OpenAI:
-  - `src/hiclaw/agents/openai_tools.py`
+  - `src/weclaw/agents/openai_tools.py`
   - builds function definitions from registry entries
   - executes the same shared handlers
 
