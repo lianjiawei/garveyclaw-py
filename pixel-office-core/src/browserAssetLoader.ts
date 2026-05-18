@@ -87,15 +87,20 @@ export function applyAssetBundle(bundle: PixelOfficeAssetBundle): void {
 }
 
 async function loadFurnitureBundle(baseUrl: string, furnitureDirs: string[]): Promise<LoadedAssetData> {
-  const catalog: LoadedAssetData['catalog'] = [];
-  const sprites: LoadedAssetData['sprites'] = {};
-  for (const dir of furnitureDirs) {
+  const groups = await Promise.all(furnitureDirs.map(async (dir) => {
     const manifest = await fetchJson<FurnitureManifest>(joinUrl(baseUrl, `${dir}/manifest.json`));
     const flattened = flattenManifest(manifest);
-    for (const asset of flattened) {
-      catalog.push(asset);
-      sprites[asset.id] = await loadSingleSprite(joinUrl(baseUrl, `${dir}/${asset.file}`), asset.width, asset.height);
-    }
+    const sprites = await Promise.all(flattened.map(async (asset) => ({
+      id: asset.id,
+      sprite: await loadSingleSprite(joinUrl(baseUrl, `${dir}/${asset.file}`), asset.width, asset.height),
+    })));
+    return { catalog: flattened, sprites };
+  }));
+  const catalog: LoadedAssetData['catalog'] = [];
+  const sprites: LoadedAssetData['sprites'] = {};
+  for (const group of groups) {
+    catalog.push(...group.catalog);
+    for (const sprite of group.sprites) sprites[sprite.id] = sprite.sprite;
   }
   return { catalog, sprites };
 }

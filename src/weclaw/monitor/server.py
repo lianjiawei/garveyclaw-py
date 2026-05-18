@@ -18,6 +18,18 @@ V2_ASSETS_DIR = ASSETS_ROOT / "pixel-office-v2"
 PIXEL_OFFICE_CORE_DIR = Path(__file__).resolve().parents[3] / "pixel-office-core"
 DEFAULT_HOST = os.getenv("WECLAW_DASHBOARD_HOST", "127.0.0.1")
 DEFAULT_PORT = int(os.getenv("WECLAW_DASHBOARD_PORT", "8765"))
+IMMUTABLE_ASSET_EXTENSIONS = {
+    ".css",
+    ".gif",
+    ".jpeg",
+    ".jpg",
+    ".js",
+    ".json",
+    ".png",
+    ".svg",
+    ".webp",
+}
+STATIC_CACHE_CONTROL = "public, max-age=86400"
 
 
 class PixelOfficeHandler(SimpleHTTPRequestHandler):
@@ -65,6 +77,12 @@ def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
     V2_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
     class CombinedHandler(SimpleHTTPRequestHandler):
+        def end_headers(self) -> None:
+            request_path = urlsplit(self.path).path
+            if Path(request_path).suffix.lower() in IMMUTABLE_ASSET_EXTENSIONS:
+                self.send_header("Cache-Control", STATIC_CACHE_CONTROL)
+            super().end_headers()
+
         def do_GET(self) -> None:
             parsed = urlsplit(self.path)
             request_path = parsed.path

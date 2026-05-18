@@ -21,15 +21,21 @@ export function applyAssetBundle(bundle) {
     buildDynamicCatalog(bundle.furniture);
 }
 async function loadFurnitureBundle(baseUrl, furnitureDirs) {
-    const catalog = [];
-    const sprites = {};
-    for (const dir of furnitureDirs) {
+    const groups = await Promise.all(furnitureDirs.map(async (dir) => {
         const manifest = await fetchJson(joinUrl(baseUrl, `${dir}/manifest.json`));
         const flattened = flattenManifest(manifest);
-        for (const asset of flattened) {
-            catalog.push(asset);
-            sprites[asset.id] = await loadSingleSprite(joinUrl(baseUrl, `${dir}/${asset.file}`), asset.width, asset.height);
-        }
+        const sprites = await Promise.all(flattened.map(async (asset) => ({
+            id: asset.id,
+            sprite: await loadSingleSprite(joinUrl(baseUrl, `${dir}/${asset.file}`), asset.width, asset.height),
+        })));
+        return { catalog: flattened, sprites };
+    }));
+    const catalog = [];
+    const sprites = {};
+    for (const group of groups) {
+        catalog.push(...group.catalog);
+        for (const sprite of group.sprites)
+            sprites[sprite.id] = sprite.sprite;
     }
     return { catalog, sprites };
 }
