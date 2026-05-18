@@ -258,7 +258,7 @@ async function fetchCommands() {
 
     lastPayload = payload;
 
-    applyCommands(payload.commands);
+    if (hasLoadedOfficeLayout) applyCommands(payload.commands);
 
     renderSidebar(payload);
 
@@ -278,7 +278,7 @@ async function fetchCommands() {
 
     lastPayload = payload;
 
-    applyCommands(payload.commands);
+    if (hasLoadedOfficeLayout) applyCommands(payload.commands);
 
     renderSidebar(payload);
 
@@ -300,7 +300,7 @@ async function loadOfficeAssets() {
 
   try {
 
-    const bundle = await withTimeout(loadAssetBundleFromBaseUrl('/core/public/assets'), 8000);
+    const bundle = await loadAssetBundleFromBaseUrl('/core/public/assets');
 
     office.loadAssets(bundle);
 
@@ -518,38 +518,6 @@ function getVisibleLayoutBounds(layout) {
 
 
 
-function withTimeout(promise, timeoutMs) {
-
-  return new Promise((resolve, reject) => {
-
-    const timer = window.setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs);
-
-    promise.then(
-
-      (value) => {
-
-        window.clearTimeout(timer);
-
-        resolve(value);
-
-      },
-
-      (error) => {
-
-        window.clearTimeout(timer);
-
-        reject(error);
-
-      },
-
-    );
-
-  });
-
-}
-
-
-
 function buildMockPayload() {
 
   const step = Math.floor(Date.now() / 4500) % 4;
@@ -702,7 +670,7 @@ function escapeHtml(value) {
 
 
 
-await fetchCommands();
+void fetchCommands();
 
 void loadOfficeAssets();
 
