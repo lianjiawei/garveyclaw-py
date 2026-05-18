@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import shutil
 import sys
@@ -59,6 +60,15 @@ DEFAULTS: dict[str, str] = {
     "FEISHU_RESTART_DELAY_SECONDS": "10",
     "FEISHU_API_RETRIES": "2",
     "FEISHU_API_RETRY_DELAY_SECONDS": "1.5",
+    "WEIXIN_BASE_URL": "https://ilinkai.weixin.qq.com",
+    "WEIXIN_CDN_BASE_URL": "https://novac2c.cdn.weixin.qq.com/c2c",
+    "WEIXIN_DM_POLICY": "open",
+    "WEIXIN_GROUP_POLICY": "disabled",
+    "WEIXIN_LONG_POLL_TIMEOUT_MS": "35000",
+    "WEIXIN_RESTART_DELAY_SECONDS": "10",
+    "WEIXIN_SEND_CHUNK_DELAY_SECONDS": "1.5",
+    "WEIXIN_SEND_CHUNK_RETRIES": "4",
+    "WEIXIN_SEND_CHUNK_RETRY_DELAY_SECONDS": "1.0",
 }
 
 
@@ -251,7 +261,8 @@ def validate_env(values: dict[str, str] | None = None, *, require_channel: bool 
 
     telegram_ready = _has_value(values, "TELEGRAM_BOT_TOKEN") and _has_value(values, "OWNER_ID")
     feishu_ready = _has_value(values, "FEISHU_APP_ID") and _has_value(values, "FEISHU_APP_SECRET")
-    if require_channel and not telegram_ready and not feishu_ready:
+    weixin_ready = _has_value(values, "WEIXIN_ACCOUNT_ID") and _has_value(values, "WEIXIN_TOKEN")
+    if require_channel and not telegram_ready and not feishu_ready and not weixin_ready:
         issues.append(
             ConfigIssue(
                 "warning",
@@ -365,11 +376,27 @@ def _yes_no(label: str, default: bool = False) -> bool:
     return value in {"y", "yes", "1", "true", "是"}
 
 
+def _run_weixin_qr_login(args: argparse.Namespace) -> dict[str, str] | None:
+    from weclaw.channels.weixin.bot import qr_login
+
+    print("Opening browser QR login for Weixin...")
+    return asyncio.run(
+        qr_login(
+            bot_type=getattr(args, "weixin_bot_type", "3"),
+            timeout_seconds=getattr(args, "weixin_login_timeout", 480),
+            write_env=False,
+            open_browser=not getattr(args, "weixin_no_open_browser", False),
+        )
+    )
+
+
 def _default_channel(values: dict[str, str]) -> str:
     if _has_value(values, "TELEGRAM_BOT_TOKEN"):
         return "telegram"
     if _has_value(values, "FEISHU_APP_ID") or _has_value(values, "FEISHU_APP_SECRET"):
         return "feishu"
+    if _has_value(values, "WEIXIN_ACCOUNT_ID") or _has_value(values, "WEIXIN_TOKEN"):
+        return "weixin"
     return "tui"
 
 
@@ -489,6 +516,7 @@ def run_setup(args: argparse.Namespace) -> int:
             [
                 ("tui", "本地 TUI（推荐先用这个测试模型）"),
                 ("telegram", "Telegram Bot"),
+                ("weixin", "Weixin personal account"),
                 ("feishu", "Feishu 机器人"),
                 ("none", "暂不配置入口，只启动 dashboard"),
             ],
@@ -517,8 +545,22 @@ def run_setup(args: argparse.Namespace) -> int:
             updates["FEISHU_APP_ID"] = app_id
         if app_secret:
             updates["FEISHU_APP_SECRET"] = app_secret
+    elif channel == "weixin":
+        if args.non_interactive:
+            account_id = args.weixin_account_id or _value(values, "WEIXIN_ACCOUNT_ID")
+            token = args.weixin_token or _value(values, "WEIXIN_TOKEN")
+            if account_id:
+                updates["WEIXIN_ACCOUNT_ID"] = account_id
+            if token:
+                updates["WEIXIN_TOKEN"] = token
+        else:
+            credentials = _run_weixin_qr_login(args)
+            if credentials:
+                updates["WEIXIN_ACCOUNT_ID"] = credentials["account_id"]
+                updates["WEIXIN_TOKEN"] = credentials["token"]
+                updates["WEIXIN_BASE_URL"] = credentials["base_url"]
     elif channel == "none":
-        for key in ("TELEGRAM_BOT_TOKEN", "OWNER_ID", "FEISHU_APP_ID", "FEISHU_APP_SECRET"):
+        for key in ("TELEGRAM_BOT_TOKEN", "OWNER_ID", "FEISHU_APP_ID", "FEISHU_APP_SECRET", "WEIXIN_ACCOUNT_ID", "WEIXIN_TOKEN"):
             if not _has_value(values, key):
                 updates[key] = ""
 
@@ -700,8 +742,23 @@ def run_channel_setup(args: argparse.Namespace) -> int:
         updates["FEISHU_APP_ID"] = app_id
         updates["FEISHU_APP_SECRET"] = app_secret
         print("已更新 Feishu 通道配置。")
+    elif channel == "weixin":
+        if args.non_interactive:
+            account_id = args.weixin_account_id or _value(values, "WEIXIN_ACCOUNT_ID")
+            token = args.weixin_token or _value(values, "WEIXIN_TOKEN")
+            updates["WEIXIN_ACCOUNT_ID"] = account_id
+            updates["WEIXIN_TOKEN"] = token
+        else:
+            credentials = _run_weixin_qr_login(args)
+            if not credentials:
+                print("Weixin QR login did not complete.")
+                return 1
+            updates["WEIXIN_ACCOUNT_ID"] = credentials["account_id"]
+            updates["WEIXIN_TOKEN"] = credentials["token"]
+            updates["WEIXIN_BASE_URL"] = credentials["base_url"]
+        print("Updated Weixin channel configuration.")
     elif channel == "none":
-        updates.update({"TELEGRAM_BOT_TOKEN": "", "OWNER_ID": "", "FEISHU_APP_ID": "", "FEISHU_APP_SECRET": ""})
+        updates.update({"TELEGRAM_BOT_TOKEN": "", "OWNER_ID": "", "FEISHU_APP_ID": "", "FEISHU_APP_SECRET": "", "WEIXIN_ACCOUNT_ID": "", "WEIXIN_TOKEN": ""})
         print("已关闭 Telegram / Feishu 通道配置。")
 
     set_env_values(updates)
@@ -717,7 +774,7 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--non-interactive", action="store_true", help="不提问，只根据参数和默认值写入 .env")
     setup_parser.add_argument("--provider", choices=["openai", "openai_compatible", "claude", "anthropic", "anthropic_compatible"])
     setup_parser.add_argument("--profile-name")
-    setup_parser.add_argument("--channel", choices=["tui", "telegram", "feishu", "none"])
+    setup_parser.add_argument("--channel", choices=["tui", "telegram", "feishu", "weixin", "none"])
     setup_parser.add_argument("--openai-api-key")
     setup_parser.add_argument("--openai-base-url")
     setup_parser.add_argument("--openai-model")
@@ -728,6 +785,11 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--owner-id")
     setup_parser.add_argument("--feishu-app-id")
     setup_parser.add_argument("--feishu-app-secret")
+    setup_parser.add_argument("--weixin-account-id")
+    setup_parser.add_argument("--weixin-token")
+    setup_parser.add_argument("--weixin-bot-type", default="3")
+    setup_parser.add_argument("--weixin-login-timeout", type=int, default=480)
+    setup_parser.add_argument("--weixin-no-open-browser", action="store_true")
     setup_parser.add_argument("--tavily-api-key")
     setup_parser.add_argument("--dashboard-host")
     setup_parser.add_argument("--dashboard-port")
@@ -761,12 +823,17 @@ def build_parser() -> argparse.ArgumentParser:
     channel_parser = subparsers.add_parser("channel", help="快速配置 Telegram / Feishu 通道")
     channel_subparsers = channel_parser.add_subparsers(dest="channel_command")
     channel_setup_parser = channel_subparsers.add_parser("setup", help="配置或关闭一个消息通道")
-    channel_setup_parser.add_argument("channel", choices=["telegram", "feishu", "none"])
+    channel_setup_parser.add_argument("channel", choices=["telegram", "feishu", "weixin", "none"])
     channel_setup_parser.add_argument("--non-interactive", action="store_true")
     channel_setup_parser.add_argument("--telegram-bot-token")
     channel_setup_parser.add_argument("--owner-id")
     channel_setup_parser.add_argument("--feishu-app-id")
     channel_setup_parser.add_argument("--feishu-app-secret")
+    channel_setup_parser.add_argument("--weixin-account-id")
+    channel_setup_parser.add_argument("--weixin-token")
+    channel_setup_parser.add_argument("--weixin-bot-type", default="3")
+    channel_setup_parser.add_argument("--weixin-login-timeout", type=int, default=480)
+    channel_setup_parser.add_argument("--weixin-no-open-browser", action="store_true")
 
     subparsers.add_parser("run", help="前台启动 WeClaw 服务，适合本地调试或进程管理器托管")
     subparsers.add_parser("start", help="后台启动 WeClaw 服务，等价于 scripts/start.sh")
