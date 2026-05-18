@@ -42,9 +42,19 @@ from weclaw.config import (
     WEIXIN_SEND_CHUNK_RETRY_DELAY_SECONDS,
     WEIXIN_TOKEN,
 )
-from weclaw.core.confirmation import get_pending_confirmation, normalize_confirmation_reply, resolve_pending_confirmation
+from weclaw.core.confirmation import (
+    ToolConfirmationRequest,
+    get_pending_confirmation,
+    grant_session_tool_access,
+    normalize_confirmation_reply,
+    register_pending_confirmation,
+    resolve_pending_confirmation,
+    wait_for_pending_confirmation,
+)
 from weclaw.core.response import AgentReply
 from weclaw.media.store import save_uploaded_file
+from weclaw.memory.session import clear_session_id
+from weclaw.tasks.service import handle_task_command
 
 logger = logging.getLogger(__name__)
 
@@ -631,6 +641,30 @@ class WeixinMessageSender:
         payload = save_uploaded_file(file_data, file_name, mimetypes.guess_type(file_name)[0] or "application/octet-stream")
         await self._send_file(target_id, payload.saved_path, "")
 
+    async def confirm_tool_use(self, target_id: str, request: ToolConfirmationRequest) -> bool:
+        try:
+            register_pending_confirmation(target_id, request)
+        except RuntimeError:
+            await self.send_text(target_id, "当前已有待确认的工具操作，请先回复：允许、本会话允许，或拒绝。")
+            return False
+
+        lines = [
+            request.prompt,
+            f"工具：{request.tool_name}",
+            f"类别：{request.category}",
+            f"风险：{request.risk_level}",
+        ]
+        if request.summary:
+            lines.append(f"摘要：{request.summary}")
+        lines.append("请回复“允许”仅执行一次；回复“本会话允许”后续本会话同工具自动执行；回复“拒绝”取消。")
+        await self.send_text(target_id, "\n".join(lines))
+
+        try:
+            return await wait_for_pending_confirmation(target_id)
+        except TimeoutError:
+            await self.send_text(target_id, "工具确认已超时，当前操作已取消。")
+            return False
+
     async def _with_session(self, call):
         if self._session is not None and not self._session.closed:
             return await call(self._session)
@@ -864,10 +898,36 @@ class WeixinBot:
         pending = get_pending_confirmation(conversation.target_id)
         if pending is not None:
             decision = normalize_confirmation_reply(text)
-            if decision is not None:
-                resolve_pending_confirmation(conversation.target_id, decision.allow)
-                await self._send_agent_reply(conversation.target_id, AgentReply.from_text("已记录你的确认。"))
+            if decision is None:
+                await self._send_agent_reply(
+                    conversation.target_id,
+                    AgentReply.from_text("当前有待确认的工具操作，请回复“允许”“本会话允许”或“拒绝”。"),
+                )
                 return
+            if decision == "approve_session":
+                granted = grant_session_tool_access(pending.request.session_scope, pending.request)
+                resolve_pending_confirmation(conversation.target_id, True)
+                message = (
+                    f"已允许并记住当前会话授权：{pending.request.tool_name}"
+                    if granted
+                    else "当前工具不支持会话级授权，已按单次确认继续执行。"
+                )
+            else:
+                approved = decision == "approve_once"
+                resolve_pending_confirmation(conversation.target_id, approved)
+                message = "已确认，继续执行。" if approved else "已取消本次工具操作。"
+            await self._send_agent_reply(conversation.target_id, AgentReply.from_text(message))
+            return
+        if text.strip().lower() == "/reset":
+            clear_session_id(conversation.session_scope)
+            await self._send_agent_reply(conversation.target_id, AgentReply.from_text("当前微信会话已重置。"))
+            return
+
+        task_result = await handle_task_command(conversation, text)
+        if task_result.handled:
+            await self._send_agent_reply(conversation.target_id, AgentReply.from_text(task_result.message))
+            return
+
         logger.info("Weixin inbound chat=%s sender=%s", target_id, sender_id)
         assert self.sender is not None
         reply = await run_agent_for_conversation(

@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import wave
 
-from weclaw.config import ASR_PROVIDER, VOSK_MODEL_DIR
+from weclaw.config import ASR_MODELS_DIR, ASR_PROVIDER, DEFAULT_VOSK_MODEL_NAME, VOSK_MODEL_DIR
 
 
 class SpeechRecognitionError(Exception):
@@ -73,7 +73,10 @@ class DisabledSpeechProvider(BaseSpeechProvider):
     name = "none"
 
     def transcribe(self, audio_path: Path) -> str:
-        raise SpeechRecognitionError("ASR is not enabled. Set ASR_PROVIDER=vosk and configure VOSK_MODEL_DIR.")
+        raise SpeechRecognitionError(
+            "ASR is not enabled. Set ASR_PROVIDER=vosk and put "
+            f"{DEFAULT_VOSK_MODEL_NAME} under {ASR_MODELS_DIR}."
+        )
 
 
 def _convert_to_wav(input_path: Path, output_path: Path) -> None:

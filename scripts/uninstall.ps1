@@ -66,6 +66,7 @@ function Main {
     Remove-PathIfExists (Join-Path $BinDir "weclaw-tui.cmd")
     Remove-PathIfExists (Join-Path $BinDir "weclaw-dashboard.cmd")
     Remove-PathIfExists (Join-Path $BinDir "weclaw-feishu.cmd")
+    Remove-PathIfExists (Join-Path $BinDir "weclaw-weixin.cmd")
 
     if ($KeepData) {
         Write-Warn "Keeping install directory because WECLAW_KEEP_DATA=1: $InstallDir"

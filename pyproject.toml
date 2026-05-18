@@ -34,14 +34,14 @@ dependencies = [
 
     "qrcode>=8.0",
 
+    "vosk>=0.3.45",
+
 ]
 
 
 [project.optional-dependencies]
 
 asr = [
-
-    "vosk>=0.3.45",
 
 ]
 

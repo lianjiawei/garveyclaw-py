@@ -4,7 +4,7 @@ WeClaw Py 是一个面向长期运行、可扩展和可观测的多通道 AI Age
 
 它当前已经具备：
 
-- 多通道接入：Telegram、Feishu、PowerShell TUI
+- 多通道接入：Telegram、Feishu、Weixin 个人号、PowerShell TUI
 - 双 Provider 路由：Claude / OpenAI
 - 统一能力层：tools / workflows / skills
 - 文件读写、命令执行、联网搜索、定时任务、分层记忆
@@ -25,6 +25,7 @@ WeClaw Py 是一个面向长期运行、可扩展和可观测的多通道 AI Age
 
 - Telegram Bot
 - Feishu 长连接机器人
+- Weixin 个人号扫码接入
 - PowerShell TUI
 
 ### Provider 能力
@@ -83,7 +84,7 @@ src/weclaw/
   cluster/                  多 Agent 集群基础层
   memory/                   分层记忆系统
   tasks/                    定时任务与调度
-  channels/                 Telegram / Feishu / TUI
+  channels/                 Telegram / Feishu / Weixin / TUI
   monitor/                  dashboard server 与前端资源
   core/                     公共类型、delivery、activity 等
   skills/                   skill 管理
@@ -178,7 +179,7 @@ irm https://raw.githubusercontent.com/lianjiawei/weclaw/master/scripts/uninstall
 
 - WeClaw 安装目录
 - 独立 Python 虚拟环境
-- `weclaw` / `weclaw-tui` / `weclaw-dashboard` / `weclaw-feishu` 命令包装器
+- `weclaw` / `weclaw-tui` / `weclaw-dashboard` / `weclaw-feishu` / `weclaw-weixin` 命令包装器
 - Windows 用户 PATH 中的 WeClaw bin 目录
 
 如果你想保留安装目录里的 `.env`、`data/`、`workspace/` 等本地数据：
@@ -222,8 +223,9 @@ http://127.0.0.1:8080
 一键安装脚本默认会：
 
 - 克隆项目到 `~/.weclaw/weclaw`（Windows 为 `%LOCALAPPDATA%\WeClaw\weclaw`）
+- 自动尝试安装 `ffmpeg`，用于本地语音消息转写
 - 创建独立 Python 虚拟环境
-- 安装 `weclaw`、`weclaw-tui`、`weclaw-dashboard`、`weclaw-feishu` 命令
+- 安装 `weclaw`、`weclaw-tui`、`weclaw-dashboard`、`weclaw-feishu`、`weclaw-weixin` 命令
 - 如果检测到 npm，自动构建 `pixel-office-core`
 
 可通过环境变量自定义安装：
@@ -280,11 +282,15 @@ python -m pip install -U pip
 python -m pip install -e .
 ```
 
-如果需要本地语音识别：
+本地语音识别依赖 `vosk`，已随默认依赖安装。系统还需要能调用 `ffmpeg`，用于把 Telegram / Feishu 的语音文件转换成 Vosk 可识别的 wav。
 
-```bash
-python -m pip install -e ".[asr]"
+默认语音模型目录是：
+
+```text
+models/asr/vosk-model-small-cn-0.22
 ```
+
+项目默认携带 `vosk-model-small-cn-0.22`，`.env` 中的 `ASR_PROVIDER=vosk` 会直接使用它；`VOSK_MODEL_DIR` 默认也指向这个目录，通常不需要手动修改。
 
 ### 4. 可选：为 `/core` dashboard 准备前端依赖
 
@@ -327,6 +333,7 @@ weclaw doctor
 weclaw setup
 weclaw model list
 weclaw channel setup telegram
+weclaw channel setup weixin
 ```
 
 如果服务器提示 `weclaw: command not found`，通常是 `~/.local/bin` 没进 PATH：
@@ -354,9 +361,10 @@ weclaw model add --protocol claude --name my-claude-gateway --api-key xxx --base
 # 切换当前模型服务
 weclaw model use deepseek
 
-# 后续再配置 Telegram / Feishu
+# 后续再配置 Telegram / Feishu / Weixin
 weclaw channel setup telegram
 weclaw channel setup feishu
+weclaw channel setup weixin
 
 # 关闭机器人通道，仅保留 TUI / dashboard
 weclaw channel setup none
@@ -434,7 +442,7 @@ weclaw model use deepseek
 weclaw model use qwen qwen-max
 ```
 
-在 TUI、Telegram 或 Feishu 里也可以用统一的 `/model` 命令：
+在 TUI、Telegram、Feishu 或 Weixin 里也可以用统一的 `/model` 命令：
 
 ```text
 /model
@@ -449,12 +457,13 @@ weclaw model use qwen qwen-max
 ```bash
 weclaw config set AGENT_PROVIDER=openai OPENAI_API_KEY=sk-xxx
 weclaw config set TELEGRAM_BOT_TOKEN=xxx OWNER_ID=123456
+weclaw channel setup weixin
 weclaw config set WECLAW_DASHBOARD_HOST=0.0.0.0 WECLAW_DASHBOARD_PORT=8765
 ```
 
 读取配置时默认会隐藏 `KEY` / `TOKEN` / `SECRET` / `PASSWORD` 类字段；排查问题时确实需要完整值，可以加 `--show-secrets`。
 
-如果你只想本地调试，不需要 Telegram / Feishu，可以运行：
+如果你只想本地调试，不需要 Telegram / Feishu / Weixin，可以运行：
 
 ```bash
 weclaw-tui
@@ -500,7 +509,7 @@ TAVILY_API_KEY=
 
 说明：
 
-- `weclaw-tui` 不依赖 Telegram 或 Feishu
+- `weclaw-tui` 不依赖 Telegram、Feishu 或 Weixin
 - `TAVILY_API_KEY` 是可选搜索增强；留空时会使用默认轻量搜索，质量、时效性和访问频率可能有限
 
 #### 方案 B：Telegram Bot
@@ -531,6 +540,31 @@ OPENAI_MODEL=gpt-4o-mini
 TAVILY_API_KEY=
 WORKSPACE_DIR=./workspace
 ```
+
+#### 方案 D：Weixin 个人号
+
+推荐使用扫码配置，不需要手动理解或填写 `WEIXIN_ACCOUNT_ID` / `WEIXIN_TOKEN`：
+
+```bash
+weclaw channel setup weixin
+```
+
+命令会打开浏览器二维码页面，使用微信扫码并在手机上确认后，WeClaw 会自动把账号凭据写入 `.env`。
+
+如果需要在无浏览器服务器上配置，也可以使用终端二维码，或先在可打开浏览器的环境完成登录后迁移 `.env` 中的 Weixin 配置项。
+
+当前 Weixin 通道已支持：
+
+- 文本收发
+- Agent 生成文件 / 图片发送
+- 工具调用确认：回复“允许”“本会话允许”或“拒绝”
+- `/tasks`、`/cancel`、`/reset` 等通道命令
+- 定时任务投递到微信会话
+
+仍在演进：
+
+- 用户从微信发来的图片 / 文件 / 语音下载后交给 Agent 处理
+- 更完整的群聊策略和多账号管理
 
 ### 3. 常用配置项
 
@@ -587,7 +621,7 @@ weclaw-tui
 适合：
 
 - 本地调试
-- 不想配置 Telegram / Feishu
+- 不想配置 Telegram / Feishu / Weixin
 - 调试工具、workflow、memory
 
 ### 方式 2：前台运行
@@ -608,7 +642,7 @@ python -m weclaw run
 - 也会同时启动 dashboard server
 - 终端关闭后服务会停止
 - 适合本地调试、Windows 原生环境，或交给 systemd/supervisor/docker 这类外部进程管理器托管
-- 如果没有配置 Telegram 或 Feishu，这个入口会直接报错；此时请使用 `weclaw-tui`
+- 如果没有配置 Telegram、Feishu 或 Weixin，这个入口会直接报错；此时请使用 `weclaw-tui`
 
 ### 方式 3：后台运行
 
@@ -673,6 +707,18 @@ weclaw-dashboard
 weclaw-feishu
 ```
 
+### 方式 6：只启动 Weixin 通道
+
+```bash
+weclaw-weixin
+```
+
+第一次连接或凭据失效时，可以重新运行：
+
+```bash
+weclaw channel setup weixin
+```
+
 ## 访问地址
 
 默认端口为 `8765`。
@@ -698,8 +744,10 @@ weclaw-feishu
 
 ```bash
 sudo apt update
-sudo apt install -y git curl python3 python3-venv python3-pip
+sudo apt install -y git curl python3 python3-venv python3-pip ffmpeg
 ```
+
+一键安装脚本会自动尝试安装 `ffmpeg`；手动部署时建议一并安装。它用于把 Telegram / Feishu 语音转成 Vosk 可识别的 wav。
 
 如果你要使用 `/core` dashboard，建议额外安装 Node.js 和 npm：
 
@@ -735,10 +783,20 @@ python -m pip install -U pip
 python -m pip install -e .
 ```
 
-如果需要语音识别：
+本地语音识别默认启用，依赖 `vosk` 和系统 `ffmpeg`。`vosk` 会随 Python 依赖安装；如果语音转写失败，请先确认服务器可以执行 `ffmpeg`。
 
-```bash
-python -m pip install -e ".[asr]"
+默认使用项目内模型目录：
+
+```text
+models/asr/vosk-model-small-cn-0.22
+```
+
+项目默认携带 `vosk-model-small-cn-0.22`。`.env` 默认配置如下：
+
+```env
+ASR_PROVIDER=vosk
+ASR_MODELS_DIR=./models/asr
+VOSK_MODEL_DIR=./models/asr/vosk-model-small-cn-0.22
 ```
 
 ### 4. 检查或继续修改 `.env`
@@ -783,10 +841,16 @@ FEISHU_APP_ID=your_feishu_app_id_here
 FEISHU_APP_SECRET=your_feishu_app_secret_here
 ```
 
+如果你使用 Weixin，推荐不要手动编辑 token，直接运行：
+
+```bash
+weclaw channel setup weixin
+```
+
 重要说明：
 
 - `weclaw run` 启动前会检查关键配置，缺少 Provider key 或消息通道时会给出修复建议
-- 如果你只是想在服务器上先验证工具和模型，不配 Telegram / Feishu 时请用 `weclaw-tui`
+- 如果你只是想在服务器上先验证工具和模型，不配 Telegram / Feishu / Weixin 时请用 `weclaw-tui`
 - 如果你要公网访问 dashboard，`WECLAW_DASHBOARD_HOST` 必须设为 `0.0.0.0`
 
 ### 5. 开放端口
@@ -914,7 +978,7 @@ TAVILY_API_KEY=your_tavily_api_key_here
 
 解决方式：
 
-- 配置 Telegram 或 Feishu 后再运行 `weclaw run`
+- 配置 Telegram、Feishu 或 Weixin 后再运行 `weclaw run`
 - 或改为使用本地 `weclaw-tui`
 
 ### 10. 更新代码
@@ -925,6 +989,7 @@ TAVILY_API_KEY=your_tavily_api_key_here
 git pull origin master
 source .venv/bin/activate
 python -m pip install -e .
+sudo apt install -y ffmpeg  # 如果机器还没有 ffmpeg
 ./scripts/stop.sh
 ./scripts/start.sh
 ```
@@ -1011,6 +1076,7 @@ python -m pytest test/ tests/ -q
 - 多 Agent 编排闭环
 - task DAG / dependency scheduling
 - 完整 cluster dashboard 可视化闭环
+- 基础语音模型的自动准备：后续希望在安装或 setup 阶段自动携带 / 下载默认 ASR 模型，减少用户单独下载、放置模型和配置路径的步骤
 
 ## 面向行业企业 Agent 的继续优化方向
 
@@ -1105,7 +1171,8 @@ python -m pytest test/ tests/ -q
 3. 长任务执行与断点恢复
 4. 记忆系统升级
 5. 多 Agent 真实协作闭环
-6. 行业系统集成与运营面板
+6. 基础语音模型自动准备
+7. 行业系统集成与运营面板
 
 这样能让项目先具备企业可落地性，再逐步增强自治能力。
 

@@ -40,8 +40,15 @@ test_image_*.png
 test_image_edit_*.png
 test_image_urls.txt
 
-# Local models can be large and machine-specific
-models/
+# Local models can be large and machine-specific.
+# Keep only the ASR folder metadata; downloaded model contents stay local.
+models/*
+!models/asr/
+models/asr/*
+!models/asr/.gitkeep
+!models/asr/README.md
+!models/asr/vosk-model-small-cn-0.22/
+!models/asr/vosk-model-small-cn-0.22/**
 
 # Local architecture / planning session files
 ARCHITECTURE.md

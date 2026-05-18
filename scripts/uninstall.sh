@@ -60,6 +60,7 @@ main() {
     remove_file "$BIN_DIR/weclaw-tui"
     remove_file "$BIN_DIR/weclaw-dashboard"
     remove_file "$BIN_DIR/weclaw-feishu"
+    remove_file "$BIN_DIR/weclaw-weixin"
 
     if [ "$KEEP_DATA" = "1" ]; then
         warn "Keeping install directory because WECLAW_KEEP_DATA=1: $INSTALL_DIR"

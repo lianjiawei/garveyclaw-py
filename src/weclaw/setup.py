@@ -34,7 +34,9 @@ DEFAULTS: dict[str, str] = {
     "WORKSPACE_DIR": "./workspace",
     "SCHEDULER_INTERVAL_SECONDS": "5",
     "WECLAW_TUI_COLOR_MODE": "auto",
-    "ASR_PROVIDER": "none",
+    "ASR_PROVIDER": "vosk",
+    "ASR_MODELS_DIR": "./models/asr",
+    "VOSK_MODEL_DIR": "./models/asr/vosk-model-small-cn-0.22",
     "SHOW_TOOL_TRACE": "0",
     "SESSION_TIMEOUT_SECONDS": "86400",
     "CAPABILITY_WATCHER_ENABLED": "1",
@@ -117,6 +119,13 @@ def _quote(value: str) -> str:
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
     return value
+
+
+def _resolve_config_path(value: str) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    return path.resolve()
 
 
 def load_env_values(path: Path | None = None) -> dict[str, str]:
@@ -281,15 +290,24 @@ def validate_env(values: dict[str, str] | None = None, *, require_channel: bool 
     if port <= 0 or port > 65535:
         issues.append(ConfigIssue("error", "invalid_dashboard_port", "WECLAW_DASHBOARD_PORT 不是有效端口。", "请设置为 1-65535 之间的端口，例如 8765。"))
 
-    asr_provider = (_value(values, "ASR_PROVIDER") or "none").lower()
+    asr_provider = (_value(values, "ASR_PROVIDER") or DEFAULTS["ASR_PROVIDER"]).lower()
     if asr_provider not in {"none", "vosk"}:
         issues.append(ConfigIssue("error", "invalid_asr_provider", "ASR_PROVIDER 只能是 none 或 vosk。", "语音识别暂不用时设置 ASR_PROVIDER=none。"))
     if asr_provider == "vosk":
-        model_dir = _value(values, "VOSK_MODEL_DIR")
+        model_dir = _value(values, "VOSK_MODEL_DIR") or DEFAULTS["VOSK_MODEL_DIR"]
         if not model_dir:
             issues.append(ConfigIssue("error", "missing_vosk_model", "ASR_PROVIDER=vosk 但 VOSK_MODEL_DIR 未配置。", "设置 VOSK_MODEL_DIR 为本地 Vosk 模型目录，或改为 ASR_PROVIDER=none。"))
-        elif not Path(model_dir).expanduser().exists():
-            issues.append(ConfigIssue("error", "missing_vosk_path", f"VOSK_MODEL_DIR 不存在：{model_dir}", "请确认模型目录路径。"))
+        elif not _resolve_config_path(model_dir).exists():
+            issues.append(
+                ConfigIssue(
+                    "error",
+                    "missing_vosk_path",
+                    f"VOSK_MODEL_DIR 不存在：{model_dir}",
+                    "默认目录是 ./models/asr/vosk-model-small-cn-0.22。请把 vosk-model-small-cn-0.22 解压到该目录，或改为 ASR_PROVIDER=none。",
+                )
+            )
+        if shutil.which("ffmpeg") is None:
+            issues.append(ConfigIssue("warning", "missing_ffmpeg", "未检测到 ffmpeg；语音消息转写需要 ffmpeg。", "一键安装脚本会尝试安装 ffmpeg；手动部署请运行 `sudo apt install -y ffmpeg`。"))
 
     tavily = _value(values, "TAVILY_API_KEY")
     if not tavily:

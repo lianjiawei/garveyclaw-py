@@ -20,6 +20,17 @@ fail() {
     exit 1
 }
 
+run_elevated() {
+    if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+        "$@"
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo "$@"
+    else
+        warn "Need root privileges to run: $*"
+        return 1
+    fi
+}
+
 find_python() {
     if [ -n "$PYTHON_BIN" ]; then
         command -v "$PYTHON_BIN" >/dev/null 2>&1 || fail "PYTHON=$PYTHON_BIN was not found."
@@ -43,6 +54,34 @@ PY
 
 ensure_git() {
     command -v git >/dev/null 2>&1 || fail "git is required. Install git first."
+}
+
+install_ffmpeg() {
+    if command -v ffmpeg >/dev/null 2>&1; then
+        info "ffmpeg is already installed"
+        return
+    fi
+
+    info "Installing ffmpeg for local voice transcription"
+    if command -v apt-get >/dev/null 2>&1; then
+        run_elevated apt-get update || return
+        run_elevated apt-get install -y ffmpeg || return
+    elif command -v dnf >/dev/null 2>&1; then
+        run_elevated dnf install -y ffmpeg || return
+    elif command -v yum >/dev/null 2>&1; then
+        run_elevated yum install -y ffmpeg || return
+    elif command -v pacman >/dev/null 2>&1; then
+        run_elevated pacman -Sy --noconfirm ffmpeg || return
+    elif command -v brew >/dev/null 2>&1; then
+        brew install ffmpeg
+    else
+        warn "ffmpeg was not found and no supported package manager was detected. Voice transcription needs ffmpeg; install it manually if voice messages fail."
+        return
+    fi
+
+    if ! command -v ffmpeg >/dev/null 2>&1; then
+        warn "ffmpeg installation command finished, but ffmpeg is still not on PATH. Voice transcription may fail until ffmpeg is available."
+    fi
 }
 
 install_repo() {
@@ -104,6 +143,7 @@ write_wrappers() {
     write_wrapper weclaw-tui
     write_wrapper weclaw-dashboard
     write_wrapper weclaw-feishu
+    write_wrapper weclaw-weixin
 }
 
 print_next_steps() {
@@ -134,6 +174,7 @@ main() {
     python_cmd="$(find_python)"
     info "Using Python: $python_cmd"
     install_repo
+    install_ffmpeg
     create_venv "$python_cmd"
     build_core_dashboard
     write_wrappers

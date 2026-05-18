@@ -68,6 +68,27 @@ function Ensure-Git {
     }
 }
 
+function Install-Ffmpeg {
+    if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+        Write-Step "ffmpeg is already installed"
+        return
+    }
+
+    Write-Step "Installing ffmpeg for local voice transcription"
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        winget install --id Gyan.FFmpeg --exact --silent --accept-package-agreements --accept-source-agreements
+    } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
+        choco install ffmpeg -y
+    } else {
+        Write-Warn "ffmpeg was not found and neither winget nor choco is available. Voice transcription needs ffmpeg; install it manually if voice messages fail."
+        return
+    }
+
+    if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+        Write-Warn "ffmpeg installation finished, but ffmpeg is still not on PATH. Open a new PowerShell window, or install ffmpeg manually if voice messages fail."
+    }
+}
+
 function Install-Repo {
     $parent = Split-Path -Parent $InstallDir
     New-Item -ItemType Directory -Force -Path $parent | Out-Null
@@ -131,6 +152,7 @@ function Install-Wrappers {
     Write-CmdWrapper "weclaw-tui"
     Write-CmdWrapper "weclaw-dashboard"
     Write-CmdWrapper "weclaw-feishu"
+    Write-CmdWrapper "weclaw-weixin"
 }
 
 function Ensure-UserPath {
@@ -149,6 +171,7 @@ function Main {
     $pythonCommand = Resolve-Python
     Write-Step "Using Python: $($pythonCommand.Exe) $($pythonCommand.Args -join ' ')"
     Install-Repo
+    Install-Ffmpeg
     Install-PythonEnvironment $pythonCommand
     Build-CoreDashboard
     Install-Wrappers

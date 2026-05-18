@@ -168,10 +168,17 @@ TELEGRAM_API_RETRY_DELAY_SECONDS = float(os.getenv("TELEGRAM_API_RETRY_DELAY_SEC
 
 
 # none 表示关闭语音识别，vosk 表示启用本地 Vosk 模型。
+DEFAULT_VOSK_MODEL_NAME = "vosk-model-small-cn-0.22"
+ASR_MODELS_DIR = Path(os.getenv("ASR_MODELS_DIR", str(PROJECT_ROOT / "models" / "asr"))).resolve()
+ASR_MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-ASR_PROVIDER = os.getenv("ASR_PROVIDER", "none")
+ASR_PROVIDER = os.getenv("ASR_PROVIDER", "vosk")
 
-VOSK_MODEL_DIR = os.getenv("VOSK_MODEL_DIR")
+_VOSK_MODEL_DIR_RAW = os.getenv("VOSK_MODEL_DIR", str(ASR_MODELS_DIR / DEFAULT_VOSK_MODEL_NAME))
+_VOSK_MODEL_DIR_PATH = Path(_VOSK_MODEL_DIR_RAW).expanduser()
+if not _VOSK_MODEL_DIR_PATH.is_absolute():
+    _VOSK_MODEL_DIR_PATH = PROJECT_ROOT / _VOSK_MODEL_DIR_PATH
+VOSK_MODEL_DIR = str(_VOSK_MODEL_DIR_PATH.resolve())
 
 
 
