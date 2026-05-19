@@ -403,12 +403,77 @@ def run_provider_check() -> int:
     return 0 if ok else 1
 
 
-def _prompt(label: str, default: str = "", *, secret: bool = False) -> str:
-    if secret:
+def _masked_input(prompt: str) -> str:
+    if not sys.stdin.isatty():
         import getpass
 
-        suffix = " [已配置，回车跳过/保留]" if default else " [可跳过，直接回车]"
-        value = getpass.getpass(f"{label}{suffix}: ").strip()
+        return getpass.getpass(prompt)
+
+    if _is_windows():
+        import msvcrt
+
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        chars: list[str] = []
+        while True:
+            char = msvcrt.getwch()
+            if char in {"\r", "\n"}:
+                sys.stdout.write("\n")
+                return "".join(chars)
+            if char == "\x03":
+                sys.stdout.write("\n")
+                raise KeyboardInterrupt
+            if char == "\x1a":
+                sys.stdout.write("\n")
+                raise EOFError
+            if char in {"\b", "\x7f"}:
+                if chars:
+                    chars.pop()
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+                continue
+            chars.append(char)
+            sys.stdout.write("*")
+            sys.stdout.flush()
+
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+    chars: list[str] = []
+    try:
+        tty.setraw(fd)
+        while True:
+            char = sys.stdin.read(1)
+            if char in {"\r", "\n"}:
+                sys.stdout.write("\n")
+                return "".join(chars)
+            if char == "\x03":
+                sys.stdout.write("\n")
+                raise KeyboardInterrupt
+            if char == "\x04":
+                sys.stdout.write("\n")
+                raise EOFError
+            if char in {"\b", "\x7f"}:
+                if chars:
+                    chars.pop()
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+                continue
+            chars.append(char)
+            sys.stdout.write("*")
+            sys.stdout.flush()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def _prompt(label: str, default: str = "", *, secret: bool = False) -> str:
+    if secret:
+        suffix = " [已配置，回车跳过/保留；输入会显示 *]" if default else " [可跳过，直接回车；输入会显示 *]"
+        value = _masked_input(f"{label}{suffix}: ").strip()
     else:
         suffix = f" [当前/默认: {default}，回车跳过/保留]" if default else " [可跳过，直接回车]"
         value = input(f"{label}{suffix}: ").strip()
