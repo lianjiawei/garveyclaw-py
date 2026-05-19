@@ -1,3 +1,5 @@
+import asyncio
+
 import logging
 
 import re
@@ -16,7 +18,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from weclaw.agents.runtime import run_agent_for_conversation
 
-from weclaw.config import SCHEDULER_INTERVAL_SECONDS
+from weclaw.config import SCHEDULER_INTERVAL_SECONDS, SCHEDULER_TASK_MAX_CONCURRENCY
 
 from weclaw.core.delivery import DeliveryRouter
 
@@ -28,6 +30,9 @@ from weclaw.tasks.repository import claim_scheduled_task_record, list_due_task_r
 
 
 logger = logging.getLogger(__name__)
+
+_scheduled_task_semaphore = asyncio.Semaphore(max(1, SCHEDULER_TASK_MAX_CONCURRENCY))
+_running_scheduled_task_ids: set[str] = set()
 
 
 
@@ -698,6 +703,40 @@ async def execute_scheduled_task(task: dict[str, Any], router: DeliveryRouter) -
         await update_task_record_after_run(task_id, error_text, None, "completed")
 
 
+async def _execute_scheduled_task_background(task: dict[str, Any], router: DeliveryRouter) -> None:
+    task_id = str(task.get("id") or "")
+    async with _scheduled_task_semaphore:
+        try:
+            await execute_scheduled_task(task, router)
+        except Exception:
+            # execute_scheduled_task handles normal failures; this keeps fire-and-forget tasks observable.
+            logger.exception("Unhandled scheduled task background failure: %s", task_id)
+        finally:
+            _running_scheduled_task_ids.discard(task_id)
+
+
+def dispatch_scheduled_task(task: dict[str, Any], router: DeliveryRouter) -> None:
+    task_id = str(task.get("id") or "")
+    if not task_id:
+        logger.warning("Skipping scheduled task dispatch because id is missing.")
+        return
+    if task_id in _running_scheduled_task_ids:
+        logger.info("Scheduled task %s is already running in this runtime; skipping duplicate dispatch.", task_id)
+        return
+    _running_scheduled_task_ids.add(task_id)
+    background_task = asyncio.create_task(_execute_scheduled_task_background(task, router), name=f"weclaw-scheduled-task:{task_id}")
+    background_task.add_done_callback(_log_background_task_exception)
+
+
+def _log_background_task_exception(task: asyncio.Task) -> None:
+    try:
+        exc = task.exception()
+    except asyncio.CancelledError:
+        return
+    if exc is not None:
+        logger.exception("Scheduled task dispatch crashed unexpectedly.", exc_info=exc)
+
+
 
 
 async def check_due_tasks(router: DeliveryRouter) -> None:
@@ -760,7 +799,7 @@ async def check_due_tasks(router: DeliveryRouter) -> None:
 
             continue
 
-        await execute_scheduled_task(task, router)
+        dispatch_scheduled_task(task, router)
 
 
 
