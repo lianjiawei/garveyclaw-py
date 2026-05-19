@@ -56,6 +56,7 @@ from weclaw.config import (
     OPENAI_CONVERSATION_HISTORY_MAX_CHARS,
     OPENAI_CONVERSATION_HISTORY_TURNS,
     OPENAI_CHAT_TIMEOUT_SECONDS,
+    OPENAI_TOOL_CALL_MAX_ROUNDS,
 )
 from weclaw.core.delivery import MessageSender
 from weclaw.core.provider_model import get_effective_api_key, get_effective_base_url, get_effective_model
@@ -849,8 +850,10 @@ async def run_openai_agent(
                 last_stream_preview: list[str] = []
                 reasoning_only_seen = False
                 timeout_seen = False
+                tool_round_limit_hit = False
+                max_tool_rounds = max(1, int(OPENAI_TOOL_CALL_MAX_ROUNDS))
 
-                for _ in range(3):
+                for tool_round in range(max_tool_rounds):
 
                     payload = _apply_openai_compat_options({
                         "model": get_effective_model("openai"),
@@ -897,6 +900,8 @@ async def run_openai_agent(
 
 
                     if stream_result.tool_calls:
+                        if tool_round + 1 >= max_tool_rounds:
+                            tool_round_limit_hit = True
 
                         messages.append(
 
@@ -952,7 +957,18 @@ async def run_openai_agent(
 
                             )
 
-                        continue
+                        if not tool_round_limit_hit:
+                            continue
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "工具调用轮次已达到上限。请停止继续调用工具，直接基于上面已经返回的工具结果，"
+                                    "给用户一个清晰、可执行的最终答复；如果信息仍不足，请明确说明缺口。"
+                                ),
+                            }
+                        )
+                        break
 
 
 
@@ -994,6 +1010,12 @@ async def run_openai_agent(
 
                     if fallback_result is not None:
                         last_stream_preview = fallback_result.raw_preview
+                        if fallback_result.tool_calls:
+                            tool_round_limit_hit = True
+                            logger.info(
+                                "OpenAI fallback returned tool calls after tool round limit: calls=%s",
+                                [call.name for call in fallback_result.tool_calls],
+                            )
                         if not fallback_result.text and fallback_result.reasoning_chunk_count:
                             reasoning_only_seen = True
                             logger.info(
@@ -1047,6 +1069,12 @@ async def run_openai_agent(
                         final_text = (
                             "模型服务这次响应超时，工具授权和执行流程已经开始，但模型没有在超时时间内返回最终答复。"
                             "请稍后重试，或把任务拆小一点；如果经常发生，可以调大 OPENAI_CHAT_TIMEOUT_SECONDS 后重启。"
+                        )
+                    elif tool_round_limit_hit:
+                        final_text = (
+                            "模型连续请求调用工具，已达到本次会话的工具调用轮次上限。"
+                            "我已停止继续执行更多工具，避免任务陷入循环。请把目标拆小一点再试，"
+                            "或调大 OPENAI_TOOL_CALL_MAX_ROUNDS 后重启。"
                         )
                     else:
 
