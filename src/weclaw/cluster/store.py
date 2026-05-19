@@ -739,6 +739,45 @@ def _set_current_execution(run: dict[str, Any], *, task_id: str = "", role: str 
     run["current_role"] = role
 
 
+def _finalize_agent_statuses(run: dict[str, Any], *, success: bool, summary: str) -> None:
+
+    agents = dict(run.get("agents") or {})
+
+    if not agents:
+
+        return
+
+    terminal_summary = _compact(summary or ("已完成" if success else "执行失败"), 180)
+
+    for agent_id, entry in list(agents.items()):
+
+        current = dict(entry or {})
+
+        status = str(current.get("status") or "").lower()
+
+        if success:
+
+            if status != "error":
+
+                current["status"] = "done"
+
+                if status in {"working", "reviewing", "waiting", "queued", "planning"} or not current.get("summary"):
+
+                    current["summary"] = terminal_summary
+
+        elif status in {"working", "reviewing", "waiting", "queued", "planning"}:
+
+            current["status"] = "error"
+
+            current["summary"] = terminal_summary
+
+        current["updated_at"] = _now_iso()
+
+        agents[agent_id] = current
+
+    run["agents"] = agents
+
+
 
 
 
@@ -855,6 +894,8 @@ def finish_cluster_run(cluster_id: str, success: bool, summary: str) -> None:
             return
 
         run["state"] = "done" if success else "error"
+
+        _finalize_agent_statuses(run, success=success, summary=summary)
 
         _set_current_execution(run)
 
