@@ -409,6 +409,12 @@ def _masked_input(prompt: str) -> str:
 
         return getpass.getpass(prompt)
 
+    def finish_line() -> None:
+        # Raw terminal mode does not translate "\n" to carriage-return + newline.
+        # Use CRLF explicitly so the next prompt starts at column 0 after paste.
+        sys.stdout.write("\r\n")
+        sys.stdout.flush()
+
     if _is_windows():
         import msvcrt
 
@@ -418,13 +424,13 @@ def _masked_input(prompt: str) -> str:
         while True:
             char = msvcrt.getwch()
             if char in {"\r", "\n"}:
-                sys.stdout.write("\n")
+                finish_line()
                 return "".join(chars)
             if char == "\x03":
-                sys.stdout.write("\n")
+                finish_line()
                 raise KeyboardInterrupt
             if char == "\x1a":
-                sys.stdout.write("\n")
+                finish_line()
                 raise EOFError
             if char in {"\b", "\x7f"}:
                 if chars:
@@ -449,13 +455,13 @@ def _masked_input(prompt: str) -> str:
         while True:
             char = sys.stdin.read(1)
             if char in {"\r", "\n"}:
-                sys.stdout.write("\n")
+                finish_line()
                 return "".join(chars)
             if char == "\x03":
-                sys.stdout.write("\n")
+                finish_line()
                 raise KeyboardInterrupt
             if char == "\x04":
-                sys.stdout.write("\n")
+                finish_line()
                 raise EOFError
             if char in {"\b", "\x7f"}:
                 if chars:
