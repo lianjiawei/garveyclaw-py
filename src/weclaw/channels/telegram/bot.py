@@ -120,7 +120,7 @@ from weclaw.skills.store import get_skill, list_skills
 from weclaw.media.speech import SpeechRecognitionError, transcribe_voice
 
 from weclaw.channels.telegram.formatting import format_telegram_text
-from weclaw.core.model_profiles import render_model_profiles, set_active_model_profile
+from weclaw.core.model_profiles import render_model_profiles, resolve_model_profile_selector, set_active_model_profile
 from weclaw.core.provider_model import get_effective_model, get_provider_mode_label
 from weclaw.core.provider_state import get_provider
 from weclaw.decision.render import render_decision_plan_debug
@@ -1467,12 +1467,16 @@ async def handle_model(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not context.args:
         await reply_plain_text(update, render_model_profiles())
         return
-    if context.args[0].lower() != "use" or len(context.args) < 2:
-        await reply_plain_text(update, "用法: /model use <profile_id> [model]")
+    args = list(context.args)
+    if args[0].lower() == "use":
+        args = args[1:]
+    if not args:
+        await reply_plain_text(update, render_model_profiles())
         return
-    profile_id = context.args[1].strip()
-    model = " ".join(context.args[2:]).strip() or None
+    selector = args[0].strip()
+    model = " ".join(args[1:]).strip() or None
     try:
+        profile_id = resolve_model_profile_selector(selector).id
         profile = set_active_model_profile(profile_id, model)
     except ValueError as exc:
         await reply_plain_text(update, str(exc))

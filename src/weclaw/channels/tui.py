@@ -67,7 +67,7 @@ from weclaw.core.confirmation import (
 from weclaw.core.response import AgentReply
 
 from weclaw.config import PROJECT_ROOT, SHOW_TOOL_TRACE, TUI_OUTPUT_DIR, WORKSPACE_DIR
-from weclaw.core.model_profiles import render_model_profiles, set_active_model_profile
+from weclaw.core.model_profiles import render_model_profiles, resolve_model_profile_selector, set_active_model_profile
 from weclaw.core.provider_model import get_effective_model, get_provider_mode_label
 from weclaw.core.provider_state import get_provider
 from weclaw.core.delivery import DeliveryRouter
@@ -1286,11 +1286,14 @@ async def run_tui() -> None:
                     print_message_block("Model", render_model_profiles(), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
                     continue
                 args = parts[1].strip().split()
-                if not args or args[0].lower() != "use" or len(args) < 2:
-                    print_message_block("Model", "用法: /model use <profile_id> [model]", subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_MUTED)
+                if args and args[0].lower() == "use":
+                    args = args[1:]
+                if not args:
+                    print_message_block("Model", render_model_profiles(), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
                     continue
                 try:
-                    profile = set_active_model_profile(args[1], " ".join(args[2:]) if len(args) > 2 else None)
+                    profile_id = resolve_model_profile_selector(args[0]).id
+                    profile = set_active_model_profile(profile_id, " ".join(args[1:]) if len(args) > 1 else None)
                 except ValueError as exc:
                     print_message_block("Model", str(exc), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_MUTED)
                     continue

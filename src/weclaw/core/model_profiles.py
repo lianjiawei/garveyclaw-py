@@ -239,7 +239,7 @@ def update_profile_available_models(profile_id: str, models: list[str]) -> Model
     return updated
 
 
-def render_model_profiles() -> str:
+def _render_model_profiles_legacy() -> str:
     active = get_active_model_profile()
     lines = [
         f"当前配置: {active.id}",
@@ -270,4 +270,48 @@ def render_model_profiles() -> str:
     lines.append("用法: /model use <profile_id> [model]")
     lines.append("新增: weclaw model add --protocol openai --name deepseek --api-key xxx --base-url https://.../v1 --model deepseek-chat")
     lines.append("刷新模型列表: weclaw model refresh [profile_id]")
+    return "\n".join(lines)
+
+
+def resolve_model_profile_selector(selector: str) -> ModelProfile:
+    value = selector.strip()
+    profiles = list_model_profiles()
+    if value.isdigit():
+        index = int(value)
+        if 1 <= index <= len(profiles):
+            return profiles[index - 1]
+    for profile in profiles:
+        if profile.id == value:
+            return profile
+    raise ValueError(f"Unknown model profile: {selector}")
+
+
+def render_model_profiles() -> str:
+    active = get_active_model_profile()
+    profiles = list_model_profiles()
+    lines = [
+        f"当前配置: {active.id}",
+        f"接口分组: {'OpenAI-compatible' if active.protocol == 'openai' else 'Anthropic-compatible'}",
+        f"当前模型: {active.model or '(empty)'}",
+        "",
+        "回复编号即可切换，例如: /model 1",
+        "也可以指定模型: /model 1 qwen3.6-plus",
+        "",
+        "可选配置:",
+    ]
+    for index, profile in enumerate(profiles, 1):
+        marker = "*" if profile.id == active.id else " "
+        protocol_label = "OpenAI-compatible" if profile.protocol == "openai" else "Anthropic-compatible"
+        lines.append(
+            f"{marker} {index}. {profile.id} | {protocol_label} | "
+            f"{profile.model or '(empty)'} | {profile.base_url or '(default endpoint)'}"
+        )
+        if profile.available_models:
+            suffix = " ..." if len(profile.available_models) > 12 else ""
+            lines.append(f"   可选模型: {', '.join(profile.available_models[:12])}{suffix}")
+    lines.append("")
+    lines.append("命令:")
+    lines.append("- /model 查看并选择")
+    lines.append("- /model <编号或profile_id> [model] 切换")
+    lines.append(f"- weclaw model refresh {active.id} 刷新当前配置的模型列表")
     return "\n".join(lines)

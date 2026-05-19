@@ -98,7 +98,7 @@ from weclaw.config import (
 )
 
 from weclaw.channels.feishu.formatting import markdown_to_lark_md
-from weclaw.core.model_profiles import render_model_profiles, set_active_model_profile
+from weclaw.core.model_profiles import render_model_profiles, resolve_model_profile_selector, set_active_model_profile
 from weclaw.core.provider_model import get_effective_model, get_provider_mode_label
 from weclaw.core.provider_state import get_provider
 from weclaw.decision.render import render_decision_plan_debug
@@ -947,11 +947,14 @@ async def handle_message(client: lark.Client, incoming: FeishuIncomingMessage) -
             await send_text_message(client, incoming.chat_id, render_model_profiles())
         else:
             parts = args[1].strip().split()
-            if not parts or parts[0].lower() != "use" or len(parts) < 2:
-                await send_text_message(client, incoming.chat_id, "用法: /model use <profile_id> [model]")
+            if parts and parts[0].lower() == "use":
+                parts = parts[1:]
+            if not parts:
+                await send_text_message(client, incoming.chat_id, render_model_profiles())
                 return
             try:
-                profile = set_active_model_profile(parts[1], " ".join(parts[2:]) if len(parts) > 2 else None)
+                profile_id = resolve_model_profile_selector(parts[0]).id
+                profile = set_active_model_profile(profile_id, " ".join(parts[1:]) if len(parts) > 1 else None)
             except ValueError as exc:
                 await send_text_message(client, incoming.chat_id, str(exc))
                 return

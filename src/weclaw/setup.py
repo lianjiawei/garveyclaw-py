@@ -836,27 +836,54 @@ def run_model_refresh(args: argparse.Namespace) -> int:
 def run_model_add(args: argparse.Namespace) -> int:
     _configure_stdio()
     ensure_env_file()
+    interactive = not all((args.protocol, args.name, args.api_key, args.model))
+    if interactive:
+        protocol = normalize_provider(
+            _choose(
+                "请选择接口协议",
+                [("openai", "OpenAI-compatible"), ("claude", "Anthropic / Claude-compatible")],
+                normalize_provider(args.protocol, default="openai"),
+            ),
+            default="openai",
+        )
+        name = _prompt("Provider 名称，也就是 profile_id，例如 bailian、deepseek、alibaba", args.name or ("openai-main" if protocol == "openai" else "claude-main"))
+        api_key = args.api_key or _prompt("API Key", "", secret=True)
+        if protocol == "openai":
+            base_url = _prompt("Base URL（官方 OpenAI 可留空；第三方通常填写 /v1 地址）", args.base_url or "")
+            model = args.model or DEFAULTS["OPENAI_MODEL"]
+        else:
+            base_url = _prompt("Base URL（官方 Anthropic 可留空；第三方 Claude-compatible 网关请填写）", args.base_url or "")
+            model = args.model or ""
+    else:
+        protocol = normalize_provider(args.protocol, default="openai")
+        name = args.name
+        api_key = args.api_key
+        base_url = args.base_url or ""
+        model = args.model or ""
     available_models: list[str] = []
     if not getattr(args, "skip_model_discovery", False):
         available_models = _discover_models_for_setup(
             ModelProfile(
-                id=args.name,
-                name=args.name,
-                protocol=args.protocol,
-                api_key=args.api_key or "",
-                base_url=args.base_url or "",
-                model=args.model or "",
+                id=name,
+                name=name,
+                protocol=protocol,
+                api_key=api_key or "",
+                base_url=base_url or "",
+                model=model or "",
             ),
-            non_interactive=True,
+            non_interactive=not interactive,
         )
+        model = _select_discovered_model(model, available_models, non_interactive=not interactive)
+    if interactive:
+        model = _prompt("模型名（可直接回车使用上面选择的模型，或手动输入）", model)
     profile = upsert_model_profile(
         ModelProfile(
-            id=args.name,
-            name=args.name,
-            protocol=args.protocol,
-            api_key=args.api_key or "",
-            base_url=args.base_url or "",
-            model=args.model or "",
+            id=name,
+            name=name,
+            protocol=protocol,
+            api_key=api_key or "",
+            base_url=base_url or "",
+            model=model or "",
             available_models=tuple(available_models),
         ),
         activate=not args.no_activate,
@@ -989,11 +1016,11 @@ def build_parser() -> argparse.ArgumentParser:
     model_subparsers = model_parser.add_subparsers(dest="model_command")
     model_subparsers.add_parser("list", help="列出当前可用模型 Provider")
     model_add_parser = model_subparsers.add_parser("add", help="新增模型 Provider")
-    model_add_parser.add_argument("--protocol", choices=["openai", "openai_compatible", "claude", "anthropic_compatible"], required=True)
-    model_add_parser.add_argument("--name", required=True)
-    model_add_parser.add_argument("--api-key", required=True)
+    model_add_parser.add_argument("--protocol", choices=["openai", "openai_compatible", "claude", "anthropic_compatible"])
+    model_add_parser.add_argument("--name")
+    model_add_parser.add_argument("--api-key")
     model_add_parser.add_argument("--base-url", default="")
-    model_add_parser.add_argument("--model", required=True)
+    model_add_parser.add_argument("--model", default="")
     model_add_parser.add_argument("--no-activate", action="store_true")
     model_add_parser.add_argument("--skip-model-discovery", action="store_true")
     model_refresh_parser = model_subparsers.add_parser("refresh", help="从服务商接口刷新可选模型列表")
