@@ -522,11 +522,48 @@ def reply_requires_waiting(text: str) -> bool:
     return any(marker in normalized for marker in waiting_markers)
 
 
+def _idle_cluster_projection() -> dict[str, Any]:
+    return {
+        "agents": [],
+        "cluster": {
+            "enabled": False,
+            "cluster_id": "",
+            "state": "idle",
+            "objective": "",
+            "active_agents": [],
+            "planned_steps": [],
+            "events": [],
+            "messages": [],
+            "tasks": [],
+            "last_event_at": "",
+            "updated_at": "",
+            "current_task_id": "",
+            "current_role": "",
+        },
+    }
+
+
+def _cluster_projection_superseded_by_agent(cluster_projection: dict[str, Any], agent: dict[str, Any]) -> bool:
+    cluster = dict(cluster_projection.get("cluster") or {})
+    if str(cluster.get("state") or "") not in {"queued", "planning", "working", "reviewing", "waiting"}:
+        return False
+    if agent.get("active_runs"):
+        return False
+
+    agent_at = _parse_iso_datetime(str(agent.get("last_active_at") or agent.get("updated_at") or ""))
+    cluster_at = _parse_iso_datetime(str(cluster.get("last_event_at") or cluster.get("updated_at") or ""))
+    if agent_at is None or cluster_at is None:
+        return False
+    return agent_at > cluster_at
+
+
 def build_agent_activity_snapshot() -> dict[str, Any]:
     state = load_agent_activity_state()
     agent = state["agent"]
     active_runs = list((agent.get("active_runs") or {}).values())
     cluster_projection = build_cluster_projection()
+    if _cluster_projection_superseded_by_agent(cluster_projection, agent):
+        cluster_projection = _idle_cluster_projection()
     return {
         "agent": {
             "agent_id": str(agent.get("agent_id") or "main"),

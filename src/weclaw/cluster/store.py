@@ -27,6 +27,7 @@ from .models import ClusterAgent, ClusterBlueprint, ClusterReviewOutcome, Cluste
 _STORE_LOCK = Lock()
 
 COMPLETED_RUN_DASHBOARD_TTL_SECONDS = 30
+ACTIVE_RUN_DASHBOARD_TTL_SECONDS = 900
 
 
 
@@ -1013,6 +1014,18 @@ def mark_cluster_task_reviewed(
 
 
 
+def _run_age_seconds(run: dict[str, Any]) -> float | None:
+
+    event_at = _parse_iso_datetime(str(run.get("last_event_at") or run.get("updated_at") or ""))
+
+    if event_at is None:
+
+        return None
+
+    return max((datetime.now() - event_at).total_seconds(), 0)
+
+
+
 def _select_dashboard_run(state: dict[str, Any]) -> dict[str, Any] | None:
 
     runs = dict(state.get("runs") or {})
@@ -1025,39 +1038,35 @@ def _select_dashboard_run(state: dict[str, Any]) -> dict[str, Any] | None:
 
     ordered_runs = [runs[item] for item in order if item in runs]
 
-    active = [run for run in ordered_runs if str(run.get("state") or "") in {"queued", "planning", "working", "reviewing", "waiting"}]
-
-    if active:
-
-        return active[-1]
-
     if not ordered_runs:
 
         return None
 
+    for run in reversed(ordered_runs):
 
+        run_state = str(run.get("state") or "")
 
-    latest = ordered_runs[-1]
+        if run_state in {"queued", "planning", "working", "reviewing", "waiting"}:
 
-    latest_state = str(latest.get("state") or "")
+            age_seconds = _run_age_seconds(run)
 
-    if latest_state not in {"done", "error"}:
+            if age_seconds is None or age_seconds <= ACTIVE_RUN_DASHBOARD_TTL_SECONDS:
 
-        return latest
+                return run
 
+            continue
 
+        if run_state in {"done", "error"}:
 
-    finished_at = _parse_iso_datetime(str(latest.get("last_event_at") or latest.get("updated_at") or ""))
+            age_seconds = _run_age_seconds(run)
 
-    if finished_at is None:
+            if age_seconds is not None and age_seconds <= COMPLETED_RUN_DASHBOARD_TTL_SECONDS:
 
-        return None
+                return run
 
-    age_seconds = max((datetime.now() - finished_at).total_seconds(), 0)
+            continue
 
-    if age_seconds <= COMPLETED_RUN_DASHBOARD_TTL_SECONDS:
-
-        return latest
+        return run
 
     return None
 

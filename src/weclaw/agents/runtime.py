@@ -320,15 +320,24 @@ async def run_agent_for_conversation(
         from weclaw.cluster.response import render_cluster_orchestration_reply, render_cluster_user_reply
 
         start_cluster_run(conversation, cluster_blueprint, decision_plan)
-        if config.AGENT_CLUSTER_DYNAMIC_PLANNER_ENABLED:
-            orchestration = await run_cluster_with_dynamic_planner(
-                conversation,
-                cluster_blueprint,
-                sender,
-                user_prompt=record_text or prompt,
-            )
-        else:
-            orchestration = await run_cluster_tasks_serial(conversation, cluster_blueprint, sender)
+        try:
+            if config.AGENT_CLUSTER_DYNAMIC_PLANNER_ENABLED:
+                orchestration = await run_cluster_with_dynamic_planner(
+                    conversation,
+                    cluster_blueprint,
+                    sender,
+                    user_prompt=record_text or prompt,
+                )
+            else:
+                orchestration = await run_cluster_tasks_serial(conversation, cluster_blueprint, sender)
+        except Exception as exc:
+            error_text = str(exc) or exc.__class__.__name__
+            outcome = _build_outcome(False, False, "", error_text)
+            await _persist_run("cluster", outcome, False)
+            _save_task_line("blocked_error")
+            finish_cluster_run(conversation, cluster_blueprint, False, error_text)
+            mark_agent_run_finished(conversation, error_text)
+            raise
         if conversation.channel in {"feishu", "telegram"}:
             reply_text = render_cluster_user_reply(orchestration)
         else:
