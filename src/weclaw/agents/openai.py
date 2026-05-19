@@ -34,6 +34,8 @@ from weclaw.config import (
 
     OPENAI_BASE_URL,
 
+    OPENAI_CHAT_DISABLE_REASONING,
+
     OPENAI_IMAGE_API_KEY,
 
     OPENAI_IMAGE_BASE_URL,
@@ -53,6 +55,7 @@ from weclaw.config import (
     OPENAI_IMAGE_TIMEOUT_SECONDS,
     OPENAI_CONVERSATION_HISTORY_MAX_CHARS,
     OPENAI_CONVERSATION_HISTORY_TURNS,
+    OPENAI_CHAT_TIMEOUT_SECONDS,
 )
 from weclaw.core.delivery import MessageSender
 from weclaw.core.provider_model import get_effective_api_key, get_effective_base_url, get_effective_model
@@ -68,6 +71,34 @@ from weclaw.agents.openai_tools import OpenAIToolContext, build_openai_tools, ex
 
 
 logger = logging.getLogger(__name__)
+
+
+def _should_disable_reasoning() -> bool:
+    setting = (OPENAI_CHAT_DISABLE_REASONING or "auto").strip().lower()
+    if setting in {"1", "true", "yes", "on"}:
+        return True
+    if setting in {"0", "false", "no", "off"}:
+        return False
+    model = (get_effective_model("openai") or "").lower()
+    base_url = (get_effective_base_url("openai") or "").lower()
+    return model.startswith("qwen") or "dashscope" in base_url
+
+
+def _apply_openai_compat_options(payload: dict[str, Any]) -> dict[str, Any]:
+    if _should_disable_reasoning():
+        payload.setdefault("enable_thinking", False)
+    return payload
+
+
+def _without_provider_options(payload: dict[str, Any]) -> dict[str, Any]:
+    fallback = dict(payload)
+    fallback.pop("enable_thinking", None)
+    return fallback
+
+
+def _chat_timeout() -> httpx.Timeout:
+    timeout = max(float(OPENAI_CHAT_TIMEOUT_SECONDS), 30.0)
+    return httpx.Timeout(timeout=timeout, connect=30.0, write=30.0, pool=30.0)
 
 
 
@@ -502,12 +533,21 @@ async def stream_chat_completion(
         if response.status_code != 200:
 
             error_text = await response.aread()
+            error_preview = error_text.decode("utf-8", errors="replace")[:500]
+            if "enable_thinking" in payload and response.status_code in {400, 422}:
+                logger.info("OpenAI %s rejected enable_thinking; retrying without provider-specific option.", timeout_hint)
+                return await stream_chat_completion(
+                    client,
+                    headers,
+                    _without_provider_options(payload),
+                    timeout_hint=timeout_hint,
+                )
 
             raise RuntimeError(
 
                 f"OpenAI {timeout_hint} chat/completions failed: HTTP {response.status_code} - "
 
-                f"{error_text.decode('utf-8', errors='replace')[:500]}"
+                f"{error_preview}"
 
             )
 
@@ -527,6 +567,14 @@ async def call_chat_completion(
         json=payload,
     )
     if response.status_code != 200:
+        if "enable_thinking" in payload and response.status_code in {400, 422}:
+            logger.info("OpenAI %s rejected enable_thinking; retrying without provider-specific option.", timeout_hint)
+            return await call_chat_completion(
+                client,
+                headers,
+                _without_provider_options(payload),
+                timeout_hint=timeout_hint,
+            )
         raise RuntimeError(
             f"OpenAI {timeout_hint} chat/completions failed: HTTP {response.status_code} - "
             f"{response.text[:500]}"
@@ -537,7 +585,13 @@ async def call_chat_completion(
         return ""
     choice = choices[0] if isinstance(choices[0], dict) else {}
     message = choice.get("message", {}) if isinstance(choice.get("message", {}), dict) else {}
-    return extract_text_from_content_value(message.get("content")).strip()
+    content = extract_text_from_content_value(message.get("content")).strip()
+    if content:
+        return content
+    reasoning = extract_text_from_content_value(message.get("reasoning_content") or message.get("reasoning")).strip()
+    if reasoning:
+        logger.info("OpenAI non-stream response contained reasoning only: chars=%s", len(reasoning))
+    return ""
 
 
 
@@ -788,22 +842,24 @@ async def run_openai_agent(
 
         async with acquire_runtime_lock(session_scope, "openai"):
 
-            async with httpx.AsyncClient(timeout=90) as client:
+            async with httpx.AsyncClient(timeout=_chat_timeout()) as client:
 
                 final_text = ""
 
                 last_stream_preview: list[str] = []
+                reasoning_only_seen = False
+                timeout_seen = False
 
                 for _ in range(3):
 
-                    payload = {
+                    payload = _apply_openai_compat_options({
                         "model": get_effective_model("openai"),
                         "messages": messages,
                         "stream": True,
                         "tools": tools,
                         "tool_choice": "auto",
 
-                    }
+                    })
 
                     if len(messages) == 2 and messages[-1].get("role") == "user":
 
@@ -811,20 +867,26 @@ async def run_openai_agent(
 
 
 
-                    stream_result = await stream_chat_completion(
+                    try:
+                        stream_result = await stream_chat_completion(
 
-                        client,
+                            client,
 
-                        headers,
+                            headers,
 
-                        payload,
+                            payload,
 
-                        timeout_hint="primary",
+                            timeout_hint="primary",
 
-                    )
+                        )
+                    except httpx.ReadTimeout:
+                        timeout_seen = True
+                        logger.warning("OpenAI primary stream timed out; falling back to plain chat completion.")
+                        break
 
                     last_stream_preview = stream_result.raw_preview
                     if not stream_result.text and stream_result.reasoning_chunk_count:
+                        reasoning_only_seen = True
                         logger.info(
                             "OpenAI stream returned reasoning-only chunks: phase=primary chunks=%s reasoning_chunks=%s reasoning_preview=%r",
                             stream_result.chunk_count,
@@ -906,35 +968,42 @@ async def run_openai_agent(
 
                     # 这里退化成纯文本 chat/completions 再试一次，优先保证基础问答可用。
 
-                    fallback_payload = {
+                    fallback_payload = _apply_openai_compat_options({
                         "model": get_effective_model("openai"),
                         "messages": messages,
                         "stream": True,
                         "temperature": 0.7,
-                    }
+                    })
 
-                    fallback_result = await stream_chat_completion(
+                    try:
+                        fallback_result = await stream_chat_completion(
 
-                        client,
+                            client,
 
-                        headers,
+                            headers,
 
-                        fallback_payload,
+                            fallback_payload,
 
-                        timeout_hint="fallback",
+                            timeout_hint="fallback",
 
-                    )
-
-                    last_stream_preview = fallback_result.raw_preview
-                    if not fallback_result.text and fallback_result.reasoning_chunk_count:
-                        logger.info(
-                            "OpenAI stream returned reasoning-only chunks: phase=fallback chunks=%s reasoning_chunks=%s reasoning_preview=%r",
-                            fallback_result.chunk_count,
-                            fallback_result.reasoning_chunk_count,
-                            fallback_result.reasoning_text[:160],
                         )
+                    except httpx.ReadTimeout:
+                        timeout_seen = True
+                        logger.warning("OpenAI fallback stream timed out; trying non-stream fallback.")
+                        fallback_result = None
 
-                    final_text = fallback_result.text.strip()
+                    if fallback_result is not None:
+                        last_stream_preview = fallback_result.raw_preview
+                        if not fallback_result.text and fallback_result.reasoning_chunk_count:
+                            reasoning_only_seen = True
+                            logger.info(
+                                "OpenAI stream returned reasoning-only chunks: phase=fallback chunks=%s reasoning_chunks=%s reasoning_preview=%r",
+                                fallback_result.chunk_count,
+                                fallback_result.reasoning_chunk_count,
+                                fallback_result.reasoning_text[:160],
+                            )
+
+                        final_text = fallback_result.text.strip()
 
 
                 if not final_text:
@@ -942,30 +1011,46 @@ async def run_openai_agent(
                     # Some OpenAI-compatible reasoning models stream reasoning_content
                     # without content. Non-streaming replies are often more stable for
                     # the final assistant message, especially after image turns.
-                    non_stream_payload = {
+                    non_stream_payload = _apply_openai_compat_options({
                         "model": get_effective_model("openai"),
                         "messages": messages,
                         "stream": False,
                         "temperature": 0.7,
-                    }
+                    })
 
-                    final_text = await call_chat_completion(
+                    try:
+                        final_text = await call_chat_completion(
 
-                        client,
+                            client,
 
-                        headers,
+                            headers,
 
-                        non_stream_payload,
+                            non_stream_payload,
 
-                        timeout_hint="non-stream fallback",
+                            timeout_hint="non-stream fallback",
 
-                    )
+                        )
+                    except httpx.ReadTimeout:
+                        timeout_seen = True
+                        logger.warning("OpenAI non-stream fallback timed out.")
 
 
 
                 if not final_text:
+                    if reasoning_only_seen:
+                        final_text = (
+                            "模型服务这次只返回了 reasoning_content，没有返回最终答复内容。"
+                            "我已经避免把推理过程直接展示出来。请重试一次，或将 OPENAI_CHAT_DISABLE_REASONING=1 后重启；"
+                            "如果仍复现，建议把当前 qwen reasoning 模型切到非 thinking 模式/非 reasoning 模型。"
+                        )
+                    elif timeout_seen:
+                        final_text = (
+                            "模型服务这次响应超时，工具授权和执行流程已经开始，但模型没有在超时时间内返回最终答复。"
+                            "请稍后重试，或把任务拆小一点；如果经常发生，可以调大 OPENAI_CHAT_TIMEOUT_SECONDS 后重启。"
+                        )
+                    else:
 
-                    logger.warning("OpenAI empty response preview: %s", last_stream_preview)
+                        logger.warning("OpenAI empty response preview: %s", last_stream_preview)
 
     except Exception:
 
