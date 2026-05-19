@@ -113,7 +113,7 @@ done
 
 echo "Started. PID: $PID  |  Log: $LOG_FILE"
 echo "  tail -f $LOG_FILE"
-echo "  ./scripts/stop.sh"
+echo "  weclaw stop"
 echo ""
 if [ "$API_READY" -ne 1 ]; then
     echo "Warning: dashboard API health check did not pass: http://127.0.0.1:${DASHBOARD_PORT}/api/activity"
