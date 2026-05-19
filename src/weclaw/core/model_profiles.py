@@ -121,6 +121,7 @@ def _sync_active_profile_to_env(profile: ModelProfile) -> None:
 def list_model_profiles() -> list[ModelProfile]:
     profiles = _env_profiles()
     raw = _load_raw()
+    custom_profiles: list[ModelProfile] = []
     for item in raw.get("profiles") or []:
         if not isinstance(item, dict):
             continue
@@ -137,6 +138,21 @@ def list_model_profiles() -> list[ModelProfile]:
             model=str(item.get("model") or "").strip(),
             available_models=tuple(str(model).strip() for model in item.get("available_models") or () if str(model).strip()),
         )
+        custom_profiles.append(profiles[profile_id])
+
+    for default_id in ("openai-default", "claude-default"):
+        default_profile = profiles.get(default_id)
+        if default_profile is None:
+            continue
+        if any(
+            custom.id != default_id
+            and custom.protocol == default_profile.protocol
+            and custom.api_key == default_profile.api_key
+            and custom.base_url == default_profile.base_url
+            and custom.model == default_profile.model
+            for custom in custom_profiles
+        ):
+            profiles.pop(default_id, None)
     return list(profiles.values())
 
 
