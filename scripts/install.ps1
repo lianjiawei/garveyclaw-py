@@ -140,19 +140,14 @@ function Build-CoreDashboard {
 
 function Write-CmdWrapper {
     param([string]$Name)
-    New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-    $target = Join-Path $BinDir "$Name.cmd"
-    $script = "@echo off`r`n`"$InstallDir\.venv\Scripts\$Name.exe`" %*`r`n"
-    Set-Content -Path $target -Value $script -Encoding ASCII
+    Write-Warn "Write-CmdWrapper is deprecated; use scripts\install-wrappers.ps1."
 }
 
 function Install-Wrappers {
     Write-Step "Installing command wrappers into $BinDir"
-    Write-CmdWrapper "weclaw"
-    Write-CmdWrapper "weclaw-tui"
-    Write-CmdWrapper "weclaw-dashboard"
-    Write-CmdWrapper "weclaw-feishu"
-    Write-CmdWrapper "weclaw-weixin"
+    $env:WECLAW_INSTALL_DIR = $InstallDir
+    $env:WECLAW_BIN_DIR = $BinDir
+    & (Join-Path $InstallDir "scripts\install-wrappers.ps1")
 }
 
 function Ensure-UserPath {

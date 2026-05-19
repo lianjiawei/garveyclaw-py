@@ -127,23 +127,9 @@ build_core_dashboard() {
     )
 }
 
-write_wrapper() {
-    local name="$1"
-    mkdir -p "$BIN_DIR"
-    cat > "$BIN_DIR/$name" <<EOF
-#!/usr/bin/env bash
-exec "$INSTALL_DIR/.venv/bin/$name" "\$@"
-EOF
-    chmod +x "$BIN_DIR/$name"
-}
-
 write_wrappers() {
     info "Installing command wrappers into $BIN_DIR"
-    write_wrapper weclaw
-    write_wrapper weclaw-tui
-    write_wrapper weclaw-dashboard
-    write_wrapper weclaw-feishu
-    write_wrapper weclaw-weixin
+    WECLAW_INSTALL_DIR="$INSTALL_DIR" WECLAW_BIN_DIR="$BIN_DIR" bash "$INSTALL_DIR/scripts/install-wrappers.sh"
 }
 
 print_next_steps() {
@@ -161,8 +147,11 @@ print_next_steps() {
     echo "If 'weclaw' is not found, add this to your shell profile:"
     echo "  export PATH=\"$BIN_DIR:\$PATH\""
     echo ""
-    echo "If you are inside the source directory, this also works:"
-    echo "  cd \"$INSTALL_DIR\" && python -m weclaw doctor"
+    echo "The wrappers always run the project virtualenv:"
+    echo "  $INSTALL_DIR/.venv"
+    echo ""
+    echo "To repair command wrappers after a manual deploy:"
+    echo "  cd \"$INSTALL_DIR\" && ./scripts/install-wrappers.sh"
     echo ""
     echo "Install path:"
     echo "  $INSTALL_DIR"

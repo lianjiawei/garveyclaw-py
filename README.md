@@ -280,7 +280,10 @@ conda activate agent
 ```bash
 python -m pip install -U pip
 python -m pip install -e .
+./scripts/install-wrappers.sh
 ```
+
+`install-wrappers.sh` 会把 `weclaw`、`weclaw-tui` 等命令固定到当前项目的 `.venv`，避免裸命令跑到 conda 或旧的用户级 Python 环境。
 
 本地语音识别依赖 `vosk`，已随默认依赖安装。系统还需要能调用 `ffmpeg`，用于把 Telegram / Feishu 的语音文件转换成 Vosk 可识别的 wav。
 
@@ -782,6 +785,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
 python -m pip install -e .
+./scripts/install-wrappers.sh
 ```
 
 本地语音识别默认启用，依赖 `vosk` 和系统 `ffmpeg`。`vosk` 会随 Python 依赖安装；如果语音转写失败，请先确认服务器可以执行 `ffmpeg`。
@@ -990,6 +994,7 @@ TAVILY_API_KEY=your_tavily_api_key_here
 git pull origin master
 source .venv/bin/activate
 python -m pip install -e .
+./scripts/install-wrappers.sh
 sudo apt install -y ffmpeg  # 如果机器还没有 ffmpeg
 ./scripts/stop.sh
 ./scripts/start.sh
