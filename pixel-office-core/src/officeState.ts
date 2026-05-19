@@ -222,6 +222,16 @@ export class OfficeState {
     return true;
   }
 
+  private ensureWorkSeat(ch: Character): void {
+    if (ch.seatId) {
+      const seat = this.seats.get(ch.seatId);
+      if (seat && this.isWorkSeat(seat)) return;
+    }
+
+    const workSeatId = this.findFreeWorkSeat();
+    if (workSeatId) this.reassignSeat(ch.id, workSeatId);
+  }
+
   seatAgentNow(id: number): boolean {
     const ch = this.characters.get(id);
     if (!ch || !ch.seatId) return false;
@@ -257,6 +267,7 @@ export class OfficeState {
       case 'working': {
         this.clearBubble(id);
         ch.currentTool = tool ?? 'Write';
+        this.ensureWorkSeat(ch);
         ch.isActive = true;
         this.sendAgentToSeat(id);
         this.rebuildFurnitureInstances();
@@ -265,6 +276,7 @@ export class OfficeState {
       case 'thinking': {
         this.clearBubble(id);
         ch.currentTool = tool ?? 'Read';
+        this.ensureWorkSeat(ch);
         ch.isActive = true;
         this.sendAgentToSeat(id);
         this.rebuildFurnitureInstances();
@@ -272,14 +284,18 @@ export class OfficeState {
       }
       case 'waiting': {
         ch.currentTool = tool ?? null;
-        ch.isActive = false;
+        this.ensureWorkSeat(ch);
+        ch.isActive = true;
+        this.sendAgentToSeat(id);
         this.showBubble(id, 'waiting');
         this.rebuildFurnitureInstances();
         return;
       }
       case 'blocked': {
         ch.currentTool = tool ?? ch.currentTool ?? 'Task';
-        this.stopAgent(id);
+        this.ensureWorkSeat(ch);
+        ch.isActive = true;
+        this.sendAgentToSeat(id);
         this.showBubble(id, 'permission');
         this.rebuildFurnitureInstances();
         return;
@@ -447,6 +463,40 @@ export class OfficeState {
   }
 
   private findFreeSeat(): string | null {
+    const electronicsTiles = this.getElectronicsTiles();
+
+    const preferred: string[] = [];
+    const fallback: string[] = [];
+
+    for (const [seatId, seat] of this.seats) {
+      if (seat.assigned) continue;
+
+      (this.seatFacesElectronics(seat, electronicsTiles) ? preferred : fallback).push(seatId);
+    }
+
+    if (preferred.length > 0) return preferred[Math.floor(Math.random() * preferred.length)];
+    if (fallback.length > 0) return fallback[Math.floor(Math.random() * fallback.length)];
+    return null;
+  }
+
+  private findFreeWorkSeat(): string | null {
+    const electronicsTiles = this.getElectronicsTiles();
+    const preferred: string[] = [];
+
+    for (const [seatId, seat] of this.seats) {
+      if (seat.assigned) continue;
+      if (this.seatFacesElectronics(seat, electronicsTiles)) preferred.push(seatId);
+    }
+
+    if (preferred.length > 0) return preferred[Math.floor(Math.random() * preferred.length)];
+    return null;
+  }
+
+  private isWorkSeat(seat: Seat): boolean {
+    return this.seatFacesElectronics(seat, this.getElectronicsTiles());
+  }
+
+  private getElectronicsTiles(): Set<string> {
     const electronicsTiles = new Set<string>();
     for (const item of this.layout.furniture) {
       const entry = getCatalogEntry(item.type);
@@ -457,48 +507,28 @@ export class OfficeState {
         }
       }
     }
+    return electronicsTiles;
+  }
 
-    const preferred: string[] = [];
-    const fallback: string[] = [];
+  private seatFacesElectronics(seat: Seat, electronicsTiles: Set<string>): boolean {
+    const dCol = seat.facingDir === 2 ? 1 : seat.facingDir === 1 ? -1 : 0;
+    const dRow = seat.facingDir === 0 ? 1 : seat.facingDir === 3 ? -1 : 0;
 
-    for (const [seatId, seat] of this.seats) {
-      if (seat.assigned) continue;
-
-      let facesElectronics = false;
-      const dCol = seat.facingDir === 2 ? 1 : seat.facingDir === 1 ? -1 : 0;
-      const dRow = seat.facingDir === 0 ? 1 : seat.facingDir === 3 ? -1 : 0;
-
-      for (let d = 1; d <= 3 && !facesElectronics; d++) {
-        const tileCol = seat.seatCol + dCol * d;
-        const tileRow = seat.seatRow + dRow * d;
-        if (electronicsTiles.has(`${tileCol},${tileRow}`)) {
-          facesElectronics = true;
-          break;
+    for (let d = 1; d <= 3; d++) {
+      const tileCol = seat.seatCol + dCol * d;
+      const tileRow = seat.seatRow + dRow * d;
+      if (electronicsTiles.has(`${tileCol},${tileRow}`)) return true;
+      if (dCol !== 0) {
+        if (electronicsTiles.has(`${tileCol},${tileRow - 1}`) || electronicsTiles.has(`${tileCol},${tileRow + 1}`)) {
+          return true;
         }
-        if (dCol !== 0) {
-          if (
-            electronicsTiles.has(`${tileCol},${tileRow - 1}`) ||
-            electronicsTiles.has(`${tileCol},${tileRow + 1}`)
-          ) {
-            facesElectronics = true;
-            break;
-          }
-        } else {
-          if (
-            electronicsTiles.has(`${tileCol - 1},${tileRow}`) ||
-            electronicsTiles.has(`${tileCol + 1},${tileRow}`)
-          ) {
-            facesElectronics = true;
-            break;
-          }
-        }
+      } else if (
+        electronicsTiles.has(`${tileCol - 1},${tileRow}`) ||
+        electronicsTiles.has(`${tileCol + 1},${tileRow}`)
+      ) {
+        return true;
       }
-
-      (facesElectronics ? preferred : fallback).push(seatId);
     }
-
-    if (preferred.length > 0) return preferred[Math.floor(Math.random() * preferred.length)];
-    if (fallback.length > 0) return fallback[Math.floor(Math.random() * fallback.length)];
-    return null;
+    return false;
   }
 }

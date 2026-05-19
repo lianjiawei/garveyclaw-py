@@ -79,7 +79,12 @@ def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
     class CombinedHandler(SimpleHTTPRequestHandler):
         def end_headers(self) -> None:
             request_path = urlsplit(self.path).path
-            if Path(request_path).suffix.lower() in IMMUTABLE_ASSET_EXTENSIONS:
+            directory = Path(str(getattr(self, "directory", ""))).resolve()
+            if directory == PIXEL_OFFICE_CORE_DIR.resolve() and (
+                request_path in {"/weclaw-dashboard.html", "/weclaw-dashboard.js"} or request_path.startswith("/dist/")
+            ):
+                self.send_header("Cache-Control", "no-store")
+            elif Path(request_path).suffix.lower() in IMMUTABLE_ASSET_EXTENSIONS:
                 self.send_header("Cache-Control", STATIC_CACHE_CONTROL)
             super().end_headers()
 

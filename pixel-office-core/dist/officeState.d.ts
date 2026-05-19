@@ -26,6 +26,7 @@ export declare class OfficeState {
     moveAgentTo(id: number, col: number, row: number): boolean;
     stopAgent(id: number): void;
     sendAgentToSeat(id: number): boolean;
+    private ensureWorkSeat;
     seatAgentNow(id: number): boolean;
     wanderAgent(id: number): void;
     setAgentMode(id: number, mode: AgentMode, tool?: string | null): void;
@@ -40,4 +41,8 @@ export declare class OfficeState {
     private placeCharacterAtSeat;
     private isCharacterOnWalkableTile;
     private findFreeSeat;
+    private findFreeWorkSeat;
+    private isWorkSeat;
+    private getElectronicsTiles;
+    private seatFacesElectronics;
 }
