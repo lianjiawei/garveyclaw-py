@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Iterable
 
 from weclaw.config import PROJECT_ROOT
-from weclaw.core.model_profiles import ModelProfile, get_active_model_profile, list_model_profiles, render_model_profiles, set_active_model_profile, upsert_model_profile
+from weclaw.core.model_discovery import discover_models
+from weclaw.core.model_profiles import ModelProfile, get_active_model_profile, list_model_profiles, render_model_profiles, set_active_model_profile, update_profile_available_models, upsert_model_profile
 from weclaw.core.provider_state import normalize_provider
 
 ENV_FILE = PROJECT_ROOT / ".env"
@@ -483,6 +484,37 @@ def _default_profile_for_protocol(protocol: str) -> ModelProfile | None:
     return profiles[0] if profiles else None
 
 
+def _select_discovered_model(current_model: str, models: list[str], *, non_interactive: bool) -> str:
+    if not models or non_interactive:
+        return current_model
+    print("")
+    print("检测到服务商可用模型：")
+    for index, model_id in enumerate(models[:30], 1):
+        marker = " (当前)" if model_id == current_model else ""
+        print(f"{index}. {model_id}{marker}")
+    if len(models) > 30:
+        print(f"... 还有 {len(models) - 30} 个模型未显示，可后续用 `weclaw model list` 查看缓存。")
+    choice = _prompt("选择模型序号，或直接输入 model id；回车保留当前值", current_model)
+    if choice.isdigit():
+        index = int(choice)
+        if 1 <= index <= min(len(models), 30):
+            return models[index - 1]
+    return choice or current_model
+
+
+def _discover_models_for_setup(profile: ModelProfile, *, non_interactive: bool) -> list[str]:
+    if not profile.api_key:
+        return []
+    print("正在尝试检测可用模型列表...")
+    result = asyncio.run(discover_models(profile))
+    if result.models:
+        print(f"已从 {result.endpoint} 检测到 {len(result.models)} 个模型。")
+        return result.models
+    if not non_interactive:
+        print(f"未能自动检测模型列表，将保留手动输入。原因：{result.error}")
+    return []
+
+
 def run_setup(args: argparse.Namespace) -> int:
     _configure_stdio()
     created = ensure_env_file()
@@ -530,6 +562,20 @@ def run_setup(args: argparse.Namespace) -> int:
             base_url = _prompt("OPENAI_BASE_URL（官方 OpenAI 可留空；第三方兼容服务通常填写 /v1 地址）", base_url)
         updates["OPENAI_BASE_URL"] = base_url
         model = args.openai_model or (existing_profile.model if existing_profile else "") or _value(values, "OPENAI_MODEL") or DEFAULTS["OPENAI_MODEL"]
+        available_models: list[str] = []
+        if not getattr(args, "skip_model_discovery", False):
+            available_models = _discover_models_for_setup(
+                ModelProfile(
+                    id=profile_name.strip() or "openai-default",
+                    name=profile_name.strip() or "OpenAI compatible",
+                    protocol="openai",
+                    api_key=key or "",
+                    base_url=base_url or "",
+                    model=model or "",
+                ),
+                non_interactive=args.non_interactive,
+            )
+            model = _select_discovered_model(model, available_models, non_interactive=args.non_interactive)
         if not args.non_interactive:
             model = _prompt("模型名（填写服务商给你的 model id，例如 gpt-4o-mini、deepseek-chat、qwen-plus）", model)
         updates["OPENAI_MODEL"] = model
@@ -541,6 +587,7 @@ def run_setup(args: argparse.Namespace) -> int:
                 api_key=key or "",
                 base_url=base_url or "",
                 model=model or "",
+                available_models=tuple(available_models),
             )
         )
         updates["MODEL_PROFILE_NAME"] = profile.id
@@ -562,6 +609,20 @@ def run_setup(args: argparse.Namespace) -> int:
             base_url = _prompt("ANTHROPIC_BASE_URL（官方 Anthropic 可留空；第三方兼容网关请填写）", base_url)
         updates["ANTHROPIC_BASE_URL"] = base_url
         model = args.anthropic_model or (existing_profile.model if existing_profile else "") or _value(values, "ANTHROPIC_MODEL")
+        available_models = []
+        if not getattr(args, "skip_model_discovery", False):
+            available_models = _discover_models_for_setup(
+                ModelProfile(
+                    id=profile_name.strip() or "claude-default",
+                    name=profile_name.strip() or "Anthropic compatible",
+                    protocol="claude",
+                    api_key=key or "",
+                    base_url=base_url or "",
+                    model=model or "",
+                ),
+                non_interactive=args.non_interactive,
+            )
+            model = _select_discovered_model(model, available_models, non_interactive=args.non_interactive)
         if not args.non_interactive:
             model = _prompt("模型名（填写服务商给你的 model id）", model)
         updates["ANTHROPIC_MODEL"] = model
@@ -573,6 +634,7 @@ def run_setup(args: argparse.Namespace) -> int:
                 api_key=key or "",
                 base_url=base_url or "",
                 model=model or "",
+                available_models=tuple(available_models),
             )
         )
         updates["MODEL_PROFILE_NAME"] = profile.id
@@ -745,9 +807,48 @@ def run_model_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_model_refresh(args: argparse.Namespace) -> int:
+    _configure_stdio()
+    profile_id = args.profile or get_active_model_profile().id
+    profiles = {profile.id: profile for profile in list_model_profiles()}
+    if profile_id not in profiles:
+        print(f"Unknown model profile: {profile_id}")
+        return 2
+    profile = profiles[profile_id]
+    print(f"正在刷新模型列表: {profile.id}")
+    result = asyncio.run(discover_models(profile))
+    if not result.models:
+        print(f"未能自动检测模型列表：{result.error}")
+        return 1
+    updated = update_profile_available_models(profile.id, result.models)
+    print(f"已检测到 {len(updated.available_models)} 个模型。")
+    print(f"- 来源: {result.endpoint}")
+    print(f"- 当前模型: {updated.model or '(empty)'}")
+    print("- 可选模型:")
+    for model in updated.available_models[:50]:
+        marker = " *" if model == updated.model else ""
+        print(f"  - {model}{marker}")
+    if len(updated.available_models) > 50:
+        print(f"  ... 还有 {len(updated.available_models) - 50} 个")
+    return 0
+
+
 def run_model_add(args: argparse.Namespace) -> int:
     _configure_stdio()
     ensure_env_file()
+    available_models: list[str] = []
+    if not getattr(args, "skip_model_discovery", False):
+        available_models = _discover_models_for_setup(
+            ModelProfile(
+                id=args.name,
+                name=args.name,
+                protocol=args.protocol,
+                api_key=args.api_key or "",
+                base_url=args.base_url or "",
+                model=args.model or "",
+            ),
+            non_interactive=True,
+        )
     profile = upsert_model_profile(
         ModelProfile(
             id=args.name,
@@ -756,6 +857,7 @@ def run_model_add(args: argparse.Namespace) -> int:
             api_key=args.api_key or "",
             base_url=args.base_url or "",
             model=args.model or "",
+            available_models=tuple(available_models),
         ),
         activate=not args.no_activate,
     )
@@ -856,6 +958,7 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--anthropic-api-key")
     setup_parser.add_argument("--anthropic-base-url")
     setup_parser.add_argument("--anthropic-model")
+    setup_parser.add_argument("--skip-model-discovery", action="store_true")
     setup_parser.add_argument("--telegram-bot-token")
     setup_parser.add_argument("--owner-id")
     setup_parser.add_argument("--feishu-app-id")
@@ -892,6 +995,9 @@ def build_parser() -> argparse.ArgumentParser:
     model_add_parser.add_argument("--base-url", default="")
     model_add_parser.add_argument("--model", required=True)
     model_add_parser.add_argument("--no-activate", action="store_true")
+    model_add_parser.add_argument("--skip-model-discovery", action="store_true")
+    model_refresh_parser = model_subparsers.add_parser("refresh", help="从服务商接口刷新可选模型列表")
+    model_refresh_parser.add_argument("profile", nargs="?")
     model_use_parser = model_subparsers.add_parser("use", help="切换当前模型 Provider")
     model_use_parser.add_argument("profile")
     model_use_parser.add_argument("model", nargs="?")

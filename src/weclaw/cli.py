@@ -16,6 +16,7 @@ from weclaw.setup import (
     run_channel_setup,
     run_model_add,
     run_model_list,
+    run_model_refresh,
     run_model_use,
     run_setup,
     validate_env,
@@ -151,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_model_list(args)
         if args.model_command == "add":
             return run_model_add(args)
+        if args.model_command == "refresh":
+            return run_model_refresh(args)
         if args.model_command == "use":
             return run_model_use(args)
         parser.error("model 需要子命令：list、add 或 use")

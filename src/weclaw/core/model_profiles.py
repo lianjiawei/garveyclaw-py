@@ -30,6 +30,7 @@ class ModelProfile:
     api_key: str = ""
     base_url: str = ""
     model: str = ""
+    available_models: tuple[str, ...] = ()
 
 
 def _slugify(value: str) -> str:
@@ -134,6 +135,7 @@ def list_model_profiles() -> list[ModelProfile]:
             api_key=str(item.get("api_key") or "").strip(),
             base_url=str(item.get("base_url") or "").strip(),
             model=str(item.get("model") or "").strip(),
+            available_models=tuple(str(model).strip() for model in item.get("available_models") or () if str(model).strip()),
         )
     return list(profiles.values())
 
@@ -175,6 +177,7 @@ def set_active_model_profile(profile_id: str, model: str | None = None) -> Model
             api_key=selected.api_key,
             base_url=selected.base_url,
             model=model.strip(),
+            available_models=selected.available_models,
         )
         upsert_model_profile(selected, activate=False)
     raw = _load_raw()
@@ -193,6 +196,7 @@ def upsert_model_profile(profile: ModelProfile, *, activate: bool = True) -> Mod
         api_key=profile.api_key.strip(),
         base_url=profile.base_url.strip(),
         model=profile.model.strip(),
+        available_models=tuple(dict.fromkeys(model.strip() for model in profile.available_models if model.strip())),
     )
     raw = _load_raw()
     custom = [item for item in raw.get("profiles") or [] if isinstance(item, dict) and item.get("id") != normalized.id]
@@ -217,6 +221,24 @@ def find_profile_by_protocol(protocol: str) -> ModelProfile | None:
     return None
 
 
+def update_profile_available_models(profile_id: str, models: list[str]) -> ModelProfile:
+    profiles = {profile.id: profile for profile in list_model_profiles()}
+    if profile_id not in profiles:
+        raise ValueError(f"Unknown model profile: {profile_id}")
+    profile = profiles[profile_id]
+    updated = ModelProfile(
+        id=profile.id,
+        name=profile.name,
+        protocol=profile.protocol,
+        api_key=profile.api_key,
+        base_url=profile.base_url,
+        model=profile.model,
+        available_models=tuple(dict.fromkeys(model.strip() for model in models if model.strip())),
+    )
+    upsert_model_profile(updated, activate=get_active_profile_id() == profile_id)
+    return updated
+
+
 def render_model_profiles() -> str:
     active = get_active_model_profile()
     lines = [
@@ -231,6 +253,9 @@ def render_model_profiles() -> str:
             continue
         marker = "*" if profile.id == active.id else "-"
         lines.append(f"{marker} {profile.id}: {profile.name} | {profile.model or '(empty)'} | {profile.base_url or '(default endpoint)'}")
+        if profile.available_models:
+            suffix = " ..." if len(profile.available_models) > 12 else ""
+            lines.append(f"  可选模型: {', '.join(profile.available_models[:12])}{suffix}")
     lines.append("")
     lines.append("Anthropic-compatible:")
     for profile in list_model_profiles():
@@ -238,7 +263,11 @@ def render_model_profiles() -> str:
             continue
         marker = "*" if profile.id == active.id else "-"
         lines.append(f"{marker} {profile.id}: {profile.name} | {profile.model or '(empty)'} | {profile.base_url or '(default endpoint)'}")
+        if profile.available_models:
+            suffix = " ..." if len(profile.available_models) > 12 else ""
+            lines.append(f"  可选模型: {', '.join(profile.available_models[:12])}{suffix}")
     lines.append("")
     lines.append("用法: /model use <profile_id> [model]")
     lines.append("新增: weclaw model add --protocol openai --name deepseek --api-key xxx --base-url https://.../v1 --model deepseek-chat")
+    lines.append("刷新模型列表: weclaw model refresh [profile_id]")
     return "\n".join(lines)
