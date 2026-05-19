@@ -171,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_shell_script("start.sh")
     if args.command == "stop":
         return _run_shell_script("stop.sh")
+    if args.command == "restart":
+        return _run_shell_script("restart.sh")
     if args.command == "status":
         return run_status()
     if args.command == "logs":

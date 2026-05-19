@@ -142,6 +142,7 @@ print_next_steps() {
     echo "  weclaw model list"
     echo "  weclaw channel setup telegram   # optional, configure later"
     echo "  weclaw start   # background mode on Linux/macOS/WSL2"
+    echo "  weclaw restart # restart background mode"
     echo "  weclaw run     # foreground mode"
     echo ""
     echo "If 'weclaw' is not found, add this to your shell profile:"

@@ -182,6 +182,7 @@ function Main {
     Write-Host "  weclaw channel setup telegram   # optional, configure later"
     Write-Host "  weclaw run     # foreground mode on Windows"
     Write-Host "  weclaw start   # background mode on Linux/macOS/WSL2"
+    Write-Host "  weclaw restart # restart background mode"
     Write-Host ""
     Write-Host "If you are inside the source directory, this also works:"
     Write-Host "  cd `"$InstallDir`"; python -m weclaw doctor"

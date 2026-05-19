@@ -1122,4 +1122,5 @@ def build_parser() -> argparse.ArgumentParser:
     logs_parser = subparsers.add_parser("logs", help="查看后台 WeClaw 日志")
     logs_parser.add_argument("-n", "--lines", type=int, default=80, help="显示最近多少行日志，默认 80")
     logs_parser.add_argument("-f", "--follow", action="store_true", help="持续跟随日志输出")
+    subparsers.add_parser("restart", help="Restart the background WeClaw service, equivalent to weclaw stop && weclaw start")
     return parser
