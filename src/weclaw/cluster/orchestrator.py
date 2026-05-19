@@ -188,6 +188,11 @@ def _has_explicit_reviewer_task(cluster_tasks: tuple[ClusterTask, ...], task_id:
     )
 
 
+def _retry_review_task_id(task_id: str, attempt_count: int) -> str:
+    base_id = task_id.split(":retry:", 1)[0]
+    return f"{base_id}:retry:{attempt_count}"
+
+
 def _executor_task_needs_retry(result: AgentTaskResult) -> tuple[bool, str, str]:
     text = (result.text or "").strip()
     if not text:
@@ -272,6 +277,8 @@ async def run_cluster_tasks_serial(
     task_index = {task.task_id: task for task in cluster_tasks}
     reviewer_id = _reviewer_agent_id(blueprint)
     reviewer_enabled = _has_reviewer(blueprint)
+    max_task_runs = max(8, sum(max(1, task.max_attempts) * 2 for task in cluster_tasks) + 4)
+    task_runs = 0
 
     async def run_one(cluster_task: ClusterTask) -> AgentTaskResult:
         spec_name = _agent_spec_name_for_task(blueprint, cluster_task)
@@ -349,6 +356,14 @@ async def run_cluster_tasks_serial(
             for task in pending.values()
             if all(dep in completed_by_id for dep in task.depends_on)
         ]
+        if task_runs + len(ready) > max_task_runs:
+            error = f"Cluster orchestration stopped after {task_runs} task runs to avoid a review/retry loop."
+            return ClusterOrchestrationResult(
+                cluster_id=blueprint.cluster_id,
+                success=False,
+                task_results=tuple(results),
+                error=error,
+            )
         if not ready:
             blocked = ", ".join(sorted(pending))
             return ClusterOrchestrationResult(
@@ -359,6 +374,7 @@ async def run_cluster_tasks_serial(
             )
 
         layer_results = await asyncio.gather(*(run_one(task) for task in ready))
+        task_runs += len(ready)
         for cluster_task, result in zip(ready, layer_results):
             results.append(result)
             if not result.success:
@@ -375,35 +391,21 @@ async def run_cluster_tasks_serial(
                 current = task_index.get(target_task_id)
                 needs_retry, outcome, review_summary = _review_result_to_outcome(result.text)
                 if current is not None:
-                    next_attempt = max(1, current.attempt_count or 1)
-                    next_state = "ready" if outcome == "changes_requested" else ("error" if outcome == "rejected" else "done")
+                    next_attempt = current.attempt_count + 1
+                    final_outcome = outcome
+                    if outcome == "changes_requested" and next_attempt >= current.max_attempts:
+                        final_outcome = "rejected"
+                    next_state = "ready" if final_outcome == "changes_requested" else ("error" if final_outcome == "rejected" else "done")
                     mark_cluster_task_reviewed(
                         blueprint.cluster_id,
                         target_task_id,
                         cluster_task.assigned_agent,
-                        outcome=outcome,
+                        outcome=final_outcome,
                         summary=review_summary,
                         next_state=next_state,
                         attempt_count=next_attempt,
                     )
-                    if outcome == "changes_requested":
-                        if next_attempt >= current.max_attempts:
-                            failed_result = AgentTaskResult(
-                                agent_name=cluster_task.assigned_agent,
-                                task_id=target_task_id,
-                                text="",
-                                success=False,
-                                error=review_summary,
-                            )
-                            pending.pop(cluster_task.task_id, None)
-                            completed_by_id[cluster_task.task_id] = result
-                            results.append(failed_result)
-                            return ClusterOrchestrationResult(
-                                cluster_id=blueprint.cluster_id,
-                                success=False,
-                                task_results=tuple(results),
-                                error=review_summary,
-                            )
+                    if final_outcome == "changes_requested":
                         retried_task = ClusterTask(
                             task_id=current.task_id,
                             cluster_id=current.cluster_id,
@@ -418,9 +420,24 @@ async def run_cluster_tasks_serial(
                             review_outcome="changes_requested",
                             review_summary=review_summary,
                         )
+                        retry_review_task = ClusterTask(
+                            task_id=_retry_review_task_id(cluster_task.task_id, next_attempt),
+                            cluster_id=cluster_task.cluster_id,
+                            title=cluster_task.title,
+                            assigned_agent=cluster_task.assigned_agent,
+                            state="queued",
+                            depends_on=(target_task_id,),
+                            input_payload=cluster_task.input_payload,
+                            output_payload=cluster_task.output_payload,
+                            attempt_count=next_attempt,
+                            max_attempts=cluster_task.max_attempts,
+                        )
+                        completed_by_id.pop(target_task_id, None)
                         task_index[target_task_id] = retried_task
+                        task_index[retry_review_task.task_id] = retry_review_task
                         pending[target_task_id] = retried_task
-                    elif outcome == "rejected":
+                        pending[retry_review_task.task_id] = retry_review_task
+                    elif final_outcome == "rejected":
                         failed_result = AgentTaskResult(
                             agent_name=cluster_task.assigned_agent,
                             task_id=target_task_id,
