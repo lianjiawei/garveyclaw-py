@@ -209,6 +209,18 @@ def validate_env(values: dict[str, str] | None = None, *, require_channel: bool 
     values = values or load_env_values()
     issues: list[ConfigIssue] = []
 
+    for cert_var in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
+        cert_path = os.environ.get(cert_var, "").strip()
+        if cert_path and not Path(cert_path).exists():
+            issues.append(
+                ConfigIssue(
+                    "error",
+                    "missing_ca_bundle",
+                    f"{cert_var} 指向的证书文件不存在：{cert_path}",
+                    f"删除这个环境变量，或把 {cert_var} 改成系统可用的 CA bundle，例如 /etc/ssl/certs/ca-certificates.crt。",
+                )
+            )
+
     if not ENV_FILE.exists():
         issues.append(
             ConfigIssue(

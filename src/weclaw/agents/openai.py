@@ -61,6 +61,7 @@ from weclaw.memory.store import append_conversation_record, load_recent_conversa
 from weclaw.core.locks import acquire_runtime_lock
 
 from weclaw.agents.openai_stream import collect_chat_sse_response
+from weclaw.agents.openai_stream import extract_text_from_content_value
 
 from weclaw.agents.openai_tools import OpenAIToolContext, build_openai_tools, execute_openai_tool
 
@@ -513,6 +514,32 @@ async def stream_chat_completion(
         return await collect_chat_sse_response(response)
 
 
+async def call_chat_completion(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    *,
+    timeout_hint: str,
+) -> str:
+    response = await client.post(
+        f"{get_effective_base_url('openai').rstrip('/')}/chat/completions",
+        headers=headers,
+        json=payload,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"OpenAI {timeout_hint} chat/completions failed: HTTP {response.status_code} - "
+            f"{response.text[:500]}"
+        )
+    payload = response.json()
+    choices = payload.get("choices", [])
+    if not choices:
+        return ""
+    choice = choices[0] if isinstance(choices[0], dict) else {}
+    message = choice.get("message", {}) if isinstance(choice.get("message", {}), dict) else {}
+    return extract_text_from_content_value(message.get("content")).strip()
+
+
 
 
 
@@ -894,6 +921,31 @@ async def run_openai_agent(
                     last_stream_preview = fallback_result.raw_preview
 
                     final_text = fallback_result.text.strip()
+
+
+                if not final_text:
+
+                    # Some OpenAI-compatible reasoning models stream reasoning_content
+                    # without content. Non-streaming replies are often more stable for
+                    # the final assistant message, especially after image turns.
+                    non_stream_payload = {
+                        "model": get_effective_model("openai"),
+                        "messages": messages,
+                        "stream": False,
+                        "temperature": 0.7,
+                    }
+
+                    final_text = await call_chat_completion(
+
+                        client,
+
+                        headers,
+
+                        non_stream_payload,
+
+                        timeout_hint="non-stream fallback",
+
+                    )
 
 
 
