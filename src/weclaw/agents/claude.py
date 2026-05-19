@@ -65,6 +65,23 @@ _DEFAULT_ANTHROPIC_API_KEY = ANTHROPIC_API_KEY
 _DEFAULT_ANTHROPIC_BASE_URL = ANTHROPIC_BASE_URL
 _DEFAULT_ANTHROPIC_MODEL = ANTHROPIC_MODEL
 
+IMAGE_UNAVAILABLE_MARKERS = (
+    "无法查看图片",
+    "无法看到图片",
+    "看不到图片",
+    "不能查看图片",
+    "不能看到图片",
+    "没有收到图片",
+    "无法访问图片",
+    "无法直接查看",
+    "can't see the image",
+    "cannot see the image",
+    "can't view the image",
+    "cannot view the image",
+    "unable to view the image",
+    "no image",
+)
+
 
 
 
@@ -130,6 +147,13 @@ def build_claude_env() -> dict[str, str]:
 
 
     return env
+
+
+def response_missed_uploaded_image(response: str, uploaded_image: Any | None) -> bool:
+    if uploaded_image is None:
+        return False
+    lowered = response.lower()
+    return any(marker.lower() in lowered for marker in IMAGE_UNAVAILABLE_MARKERS)
 
 
 
@@ -392,6 +416,46 @@ async def run_agent(
                 )
 
                 response, latest_session_id = await collect_agent_response(prompt, retry_options)
+
+            if response_missed_uploaded_image(response, uploaded_image):
+
+                logger.warning("Claude response appears to miss uploaded image; retrying with explicit image tool instruction.")
+
+                image_retry_options = ClaudeAgentOptions(
+
+                    permission_mode="acceptEdits",
+
+                    env=claude_env,
+
+                    cwd=str(WORKSPACE_DIR),
+
+                    tools=[],
+
+                    system_prompt=build_system_prompt(prompt, session_scope, decision_plan, has_uploaded_image=True),
+
+                    mcp_servers={"weclaw": tool_server},
+
+                    allowed_tools=allowed_tools,
+
+                    hooks=build_tool_hooks(sender, target_id, conversation),
+
+                    continue_conversation=False,
+
+                    resume=None,
+
+                )
+
+                image_retry_prompt = (
+                    "本轮用户上传了图片。你上一轮回复似乎没有成功查看图片。"
+                    "请先调用 get_uploaded_image 工具获取图片内容，再结合图片和用户说明直接回答。\n\n"
+                    f"用户原始请求：{prompt}"
+                )
+
+                retry_response, retry_session_id = await collect_agent_response(image_retry_prompt, image_retry_options)
+
+                if retry_response.strip() and not response_missed_uploaded_image(retry_response, uploaded_image):
+                    response = retry_response
+                    latest_session_id = retry_session_id or latest_session_id
 
     except ClaudeConfigurationError:
 

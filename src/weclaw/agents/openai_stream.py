@@ -17,9 +17,11 @@ class OpenAIToolCall:
 @dataclass(slots=True)
 class OpenAIChatStreamResult:
     text: str = ""
+    reasoning_text: str = ""
     tool_calls: list[OpenAIToolCall] = field(default_factory=list)
     usage: dict[str, Any] | None = None
     chunk_count: int = 0
+    reasoning_chunk_count: int = 0
     raw_preview: list[str] = field(default_factory=list)
 
 
@@ -55,6 +57,27 @@ def extract_chat_chunk_text(chunk: dict[str, Any]) -> str:
         delta.get("content"),
         message.get("content"),
         choice.get("text"),
+    ):
+        text = extract_text_from_content_value(candidate)
+        if text:
+            return text
+    return ""
+
+
+def extract_chat_chunk_reasoning_text(chunk: dict[str, Any]) -> str:
+    choices = chunk.get("choices", [])
+    if not choices:
+        return ""
+
+    choice = choices[0] if isinstance(choices[0], dict) else {}
+    delta = choice.get("delta", {}) if isinstance(choice.get("delta", {}), dict) else {}
+    message = choice.get("message", {}) if isinstance(choice.get("message", {}), dict) else {}
+
+    for candidate in (
+        delta.get("reasoning_content"),
+        delta.get("reasoning"),
+        message.get("reasoning_content"),
+        message.get("reasoning"),
     ):
         text = extract_text_from_content_value(candidate)
         if text:
@@ -105,6 +128,10 @@ async def collect_chat_sse_response(response: httpx.Response) -> OpenAIChatStrea
         text = extract_chat_chunk_text(chunk)
         if text:
             result.text += text
+        reasoning_text = extract_chat_chunk_reasoning_text(chunk)
+        if reasoning_text:
+            result.reasoning_text += reasoning_text
+            result.reasoning_chunk_count += 1
         if chunk.get("usage"):
             result.usage = chunk["usage"]
 

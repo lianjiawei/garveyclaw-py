@@ -824,6 +824,13 @@ async def run_openai_agent(
                     )
 
                     last_stream_preview = stream_result.raw_preview
+                    if not stream_result.text and stream_result.reasoning_chunk_count:
+                        logger.info(
+                            "OpenAI stream returned reasoning-only chunks: phase=primary chunks=%s reasoning_chunks=%s reasoning_preview=%r",
+                            stream_result.chunk_count,
+                            stream_result.reasoning_chunk_count,
+                            stream_result.reasoning_text[:160],
+                        )
 
 
 
@@ -919,6 +926,13 @@ async def run_openai_agent(
                     )
 
                     last_stream_preview = fallback_result.raw_preview
+                    if not fallback_result.text and fallback_result.reasoning_chunk_count:
+                        logger.info(
+                            "OpenAI stream returned reasoning-only chunks: phase=fallback chunks=%s reasoning_chunks=%s reasoning_preview=%r",
+                            fallback_result.chunk_count,
+                            fallback_result.reasoning_chunk_count,
+                            fallback_result.reasoning_text[:160],
+                        )
 
                     final_text = fallback_result.text.strip()
 

@@ -361,6 +361,47 @@ def print_doctor_report(issues: list[ConfigIssue], *, quiet: bool = False) -> No
             print(f"  修复建议: {issue.hint}")
 
 
+class _DoctorMessageSender:
+    async def send_text(self, target_id: str, text: str) -> None:
+        return None
+
+    async def send_file(self, target_id: str, file_data: bytes, file_name: str) -> None:
+        return None
+
+
+async def _run_provider_check() -> tuple[bool, str]:
+    from weclaw.agents.router import run_agent
+    from weclaw.core.provider_state import get_provider
+
+    provider = get_provider()
+    reply = await run_agent(
+        prompt="请只回复 WECLAW_OK，用于检查当前模型链路是否可用。",
+        sender=_DoctorMessageSender(),
+        target_id="doctor",
+        continue_session=False,
+        record_text="[doctor] provider check",
+        session_scope="doctor:provider-check",
+        channel="doctor",
+    )
+    text = reply.text.strip()
+    if not text:
+        return False, f"{provider}: 模型返回为空。"
+    return True, f"{provider}: 模型链路可用，回复预览：{text[:80]}"
+
+
+def run_provider_check() -> int:
+    print("")
+    print("Provider 链路检查")
+    try:
+        ok, message = asyncio.run(_run_provider_check())
+    except Exception as exc:
+        print(f"- [ERROR] 模型链路调用失败：{exc}")
+        return 1
+    prefix = "OK" if ok else "ERROR"
+    print(f"- [{prefix}] {message}")
+    return 0 if ok else 1
+
+
 def _prompt(label: str, default: str = "", *, secret: bool = False) -> str:
     if secret:
         import getpass
@@ -642,7 +683,11 @@ def run_doctor(args: argparse.Namespace) -> int:
     _configure_stdio()
     issues = validate_env(require_channel=not args.tui_only)
     print_doctor_report(issues, quiet=args.quiet)
-    return 1 if any(issue.level == "error" for issue in issues) else 0
+    status = 1 if any(issue.level == "error" for issue in issues) else 0
+    if getattr(args, "provider_check", False):
+        provider_status = run_provider_check()
+        status = max(status, provider_status)
+    return status
 
 
 def run_config_set(pairs: Iterable[str]) -> int:
@@ -827,6 +872,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser = subparsers.add_parser("doctor", help="检查当前 .env 是否具备启动条件")
     doctor_parser.add_argument("--quiet", action="store_true", help="只返回退出码，不输出报告")
     doctor_parser.add_argument("--tui-only", action="store_true", help="只检查本地 TUI 所需配置，不要求消息通道")
+    doctor_parser.add_argument("--provider-check", action="store_true", help="实际调用当前模型 Provider，检查文本 Agent 链路是否可用")
 
     config_parser = subparsers.add_parser("config", help="命令行读取/更新 .env")
     config_subparsers = config_parser.add_subparsers(dest="config_command")
