@@ -1377,9 +1377,7 @@ async def handle_message(client: lark.Client, incoming: FeishuIncomingMessage) -
 
                 f"用户附带说明：{caption}\n\n"
 
-                "请先调用 get_uploaded_image 工具获取本轮图片内容，"
-
-                "再结合图片和用户说明进行分析，并直接给出有帮助的中文回答。"
+                "请结合图片和用户说明进行分析，并直接给出有帮助的中文回答。"
 
             )
 

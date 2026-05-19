@@ -1480,6 +1480,56 @@ def append_conversation_record(user_message: str, assistant_reply: str, session_
 
 
 
+def load_recent_conversation_turns(
+    session_scope: str | None,
+    *,
+    limit: int = 6,
+    max_chars_per_message: int = 2400,
+    days: int = 7,
+) -> list[dict[str, str]]:
+    """Load recent user/assistant text turns for providers without native resume."""
+
+    ensure_memory_files()
+    if not session_scope or limit <= 0:
+        return []
+
+    target_scope = _sanitize_scope(session_scope)
+    cutoff = datetime.now() - timedelta(days=max(days, 1))
+    turns: list[dict[str, str]] = []
+
+    for log_file in sorted(CONVERSATIONS_DIR.glob("*.jsonl"), reverse=True):
+        try:
+            date_match = re.match(r"^(\d{4}-\d{2}-\d{2})\.jsonl$", log_file.name)
+            if not date_match:
+                continue
+            file_date = datetime.strptime(date_match.group(1), "%Y-%m-%d")
+            if file_date < cutoff:
+                continue
+            lines = log_file.read_text(encoding="utf-8").splitlines()
+        except (OSError, ValueError):
+            continue
+
+        for line in reversed(lines):
+            if len(turns) >= limit:
+                return list(reversed(turns))
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            if str(payload.get("session_scope") or "") != target_scope:
+                continue
+
+            user_message = _compact_text(str(payload.get("user_message") or ""), max_chars_per_message)
+            assistant_reply = _compact_text(str(payload.get("assistant_reply") or ""), max_chars_per_message)
+            if not user_message or not assistant_reply:
+                continue
+            turns.append({"user": user_message, "assistant": assistant_reply})
+
+    return list(reversed(turns))
+
+
 def _parse_candidate_timestamp(filename: str) -> datetime | None:
 
     match = re.match(r"^(?P<ts>\d{8}_\d{6})_", filename)

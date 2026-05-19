@@ -22,13 +22,11 @@ import httpx
 
 
 
-from weclaw.capabilities.tools import list_openai_tool_names, parse_openai_allowed_tools
+from weclaw.agents.prompts import build_openai_instructions as build_shared_openai_instructions
 
 from weclaw.core.response import AgentImage, AgentReply
 
 from weclaw.decision.models import DecisionPlan
-
-from weclaw.decision.render import render_decision_plan
 
 from weclaw.config import (
 
@@ -53,16 +51,14 @@ from weclaw.config import (
     OPENAI_IMAGE_QUALITY,
     OPENAI_IMAGE_SIZE,
     OPENAI_IMAGE_TIMEOUT_SECONDS,
-    WORKSPACE_DIR,
+    OPENAI_CONVERSATION_HISTORY_MAX_CHARS,
+    OPENAI_CONVERSATION_HISTORY_TURNS,
 )
 from weclaw.core.delivery import MessageSender
 from weclaw.core.provider_model import get_effective_api_key, get_effective_base_url, get_effective_model
-from weclaw.core.types import ConversationRef
-from weclaw.memory.store import append_conversation_record, build_context_snapshot
+from weclaw.memory.store import append_conversation_record, load_recent_conversation_turns
 
 from weclaw.core.locks import acquire_runtime_lock
-
-from weclaw.skills.store import build_skill_prompt
 
 from weclaw.agents.openai_stream import collect_chat_sse_response
 
@@ -300,89 +296,49 @@ def wants_image_output(prompt: str, record_text: str | None, uploaded_image: Any
 
 
 
-def build_openai_instructions(prompt: str, session_scope: str | None = None, decision_plan: DecisionPlan | None = None) -> str:
+def build_openai_instructions(
+    prompt: str,
+    session_scope: str | None = None,
+    decision_plan: DecisionPlan | None = None,
+    *,
+    has_uploaded_image: bool = False,
+) -> str:
 
     """构造 OpenAI chat/completions 使用的系统提示。"""
 
-
-
-    context_snapshot = build_context_snapshot(session_scope, prompt)
-
-    selected_skills, skill_prompt = build_skill_prompt(prompt, decision_plan.selected_skills if decision_plan is not None else None)
-
-    selected_skill_names = ", ".join(skill.name for skill in selected_skills) or "无"
-
-    tool_names = list_openai_tool_names(allowed_names=parse_openai_allowed_tools())
-
-    tool_list_text = "、".join(f"`{name}`" for name in tool_names)
-
-    decision_text = render_decision_plan(decision_plan)
-
-
-
-    return f"""
-
-你现在运行在一个多入口个人智能体系统中。
-
-当前工作区目录是：{WORKSPACE_DIR}
-
-
-
-下面是当前可用的分层上下文快照：
-
-{context_snapshot}
-
-
-
-本轮命中的 skill：{selected_skill_names}
-
-
-
-{skill_prompt}
-
-
-
-{decision_text}
-
-
-
-规则：
-
-1. 回答尽量使用自然、清晰的中文。
-
-2. 本模式当前可用工具有：{tool_list_text}。
-
-3. 当用户询问当前时间时，优先调用 `get_current_time`。
-
-4. 当用户需要联网搜索信息（天气、新闻、百科等）时，必须调用 `web_search`，禁止用 curl、wget、bash 等任何方式直接爬取网页替代搜索。
-
-5. 如果需要额外主动给当前会话发送一条消息，请调用 `send_message`。
-
-6. 可以使用文件查看、编辑、任务管理和 Bash 工具。
-
-7. 如果工具足以回答问题，先调用工具，再基于工具结果给出最终回答。
-
-8. 如果工具不可用或没有必要，不要虚构工具结果。
-
-9. **Shell 平台适配**：`bash` 工具已按操作系统自动选择 shell。在 Linux/macOS 上直接编写 Bash 命令；在 Windows 上编写 PowerShell 命令。Windows 下使用 PowerShell 等效命令（Move-Item、Remove-Item、Get-ChildItem、Get-Content、Select-String 等）。
-
-""".strip()
+    return build_shared_openai_instructions(prompt, session_scope, decision_plan, has_uploaded_image=has_uploaded_image)
 
 
 
 
 
-def build_chat_messages(prompt: str, uploaded_image: Any | None) -> list[dict[str, Any]]:
+def build_history_messages(history: list[dict[str, str]]) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    for turn in history:
+        user_message = str(turn.get("user") or "").strip()
+        assistant_reply = str(turn.get("assistant") or "").strip()
+        if not user_message or not assistant_reply:
+            continue
+        messages.append({"role": "user", "content": user_message})
+        messages.append({"role": "assistant", "content": assistant_reply})
+    return messages
+
+
+def build_chat_messages(prompt: str, uploaded_image: Any | None, history: list[dict[str, str]] | None = None) -> list[dict[str, Any]]:
+
+    messages = build_history_messages(history or [])
 
     if uploaded_image is None:
 
-        return [{"role": "user", "content": prompt}]
+        return [*messages, {"role": "user", "content": prompt}]
 
 
 
     image_data = base64.b64encode(uploaded_image.data).decode("ascii")
 
     return [
+
+        *messages,
 
         {
 
@@ -765,12 +721,21 @@ async def run_openai_agent(
 
 
     headers = build_chat_headers()
+    history = (
+        load_recent_conversation_turns(
+            session_scope,
+            limit=OPENAI_CONVERSATION_HISTORY_TURNS,
+            max_chars_per_message=OPENAI_CONVERSATION_HISTORY_MAX_CHARS,
+        )
+        if continue_session
+        else []
+    )
 
     messages = [
 
-        {"role": "system", "content": build_openai_instructions(prompt, session_scope, decision_plan)},
+        {"role": "system", "content": build_openai_instructions(prompt, session_scope, decision_plan, has_uploaded_image=uploaded_image is not None)},
 
-        *build_chat_messages(prompt, uploaded_image),
+        *build_chat_messages(prompt, uploaded_image, history),
 
     ]
 

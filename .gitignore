@@ -18,6 +18,12 @@ node_modules/
 
 # Local environment and secrets
 .env
+.env.course
+.env.course.example
+
+# Course/demo workspace files kept local
+COURSE_GUIDE.md
+claw_course_bot.py
 
 # Claude Code local session memory
 .claude/
