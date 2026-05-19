@@ -11,6 +11,7 @@ import json
 import logging
 
 import re
+from dataclasses import dataclass
 
 from typing import Any
 
@@ -101,6 +102,69 @@ def _chat_timeout() -> httpx.Timeout:
     timeout = max(float(OPENAI_CHAT_TIMEOUT_SECONDS), 30.0)
     return httpx.Timeout(timeout=timeout, connect=30.0, write=30.0, pool=30.0)
 
+
+@dataclass(slots=True)
+class OpenAIChatRunState:
+    final_text: str = ""
+    last_stream_preview: list[str] | None = None
+    reasoning_only_seen: bool = False
+    timeout_seen: bool = False
+    tool_round_limit_hit: bool = False
+
+    def note_stream_result(self, result: Any, *, phase: str) -> None:
+        self.last_stream_preview = result.raw_preview
+        if result.text or not result.reasoning_chunk_count:
+            return
+        self.reasoning_only_seen = True
+        logger.info(
+            "OpenAI stream returned reasoning-only chunks: phase=%s chunks=%s reasoning_chunks=%s reasoning_preview=%r",
+            phase,
+            result.chunk_count,
+            result.reasoning_chunk_count,
+            result.reasoning_text[:160],
+        )
+
+    def user_visible_fallback(self) -> str:
+        if self.reasoning_only_seen:
+            return (
+                "模型服务这次只返回了 reasoning_content，没有返回最终答复内容。"
+                "我已经避免把推理过程直接展示出来。请重试一次，或将 OPENAI_CHAT_DISABLE_REASONING=1 后重启；"
+                "如果仍复现，建议把当前 qwen reasoning 模型切到非 thinking 模式/非 reasoning 模型。"
+            )
+        if self.timeout_seen:
+            return (
+                "模型服务这次响应超时，工具授权和执行流程已经开始，但模型没有在超时时间内返回最终答复。"
+                "请稍后重试，或把任务拆小一点；如果经常发生，可以调大 OPENAI_CHAT_TIMEOUT_SECONDS 后重启。"
+            )
+        if self.tool_round_limit_hit:
+            return (
+                "模型连续请求调用工具，已达到本次会话的工具调用轮次上限。"
+                "我已停止继续执行更多工具，避免任务陷入循环。请把目标拆小一点再试，"
+                "或调大 OPENAI_TOOL_CALL_MAX_ROUNDS 后重启。"
+            )
+        return ""
+
+
+def _chat_payload(
+    messages: list[dict[str, Any]],
+    *,
+    stream: bool,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: str | None = None,
+    temperature: float | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": get_effective_model("openai"),
+        "messages": messages,
+        "stream": stream,
+    }
+    if tools is not None:
+        payload["tools"] = tools
+    if tool_choice is not None:
+        payload["tool_choice"] = tool_choice
+    if temperature is not None:
+        payload["temperature"] = temperature
+    return _apply_openai_compat_options(payload)
 
 
 IMAGE_REQUEST_KEYWORDS = (
@@ -845,30 +909,18 @@ async def run_openai_agent(
 
             async with httpx.AsyncClient(timeout=_chat_timeout()) as client:
 
-                final_text = ""
-
-                last_stream_preview: list[str] = []
-                reasoning_only_seen = False
-                timeout_seen = False
-                tool_round_limit_hit = False
+                state = OpenAIChatRunState()
                 max_tool_rounds = max(1, int(OPENAI_TOOL_CALL_MAX_ROUNDS))
 
                 for tool_round in range(max_tool_rounds):
 
-                    payload = _apply_openai_compat_options({
-                        "model": get_effective_model("openai"),
-                        "messages": messages,
-                        "stream": True,
-                        "tools": tools,
-                        "tool_choice": "auto",
-
-                    })
-
-                    if len(messages) == 2 and messages[-1].get("role") == "user":
-
-                        payload["temperature"] = 0.7
-
-
+                    payload = _chat_payload(
+                        messages,
+                        stream=True,
+                        tools=tools,
+                        tool_choice="auto",
+                        temperature=0.7 if len(messages) == 2 and messages[-1].get("role") == "user" else None,
+                    )
 
                     try:
                         stream_result = await stream_chat_completion(
@@ -883,25 +935,15 @@ async def run_openai_agent(
 
                         )
                     except httpx.ReadTimeout:
-                        timeout_seen = True
+                        state.timeout_seen = True
                         logger.warning("OpenAI primary stream timed out; falling back to plain chat completion.")
                         break
 
-                    last_stream_preview = stream_result.raw_preview
-                    if not stream_result.text and stream_result.reasoning_chunk_count:
-                        reasoning_only_seen = True
-                        logger.info(
-                            "OpenAI stream returned reasoning-only chunks: phase=primary chunks=%s reasoning_chunks=%s reasoning_preview=%r",
-                            stream_result.chunk_count,
-                            stream_result.reasoning_chunk_count,
-                            stream_result.reasoning_text[:160],
-                        )
-
-
+                    state.note_stream_result(stream_result, phase="primary")
 
                     if stream_result.tool_calls:
                         if tool_round + 1 >= max_tool_rounds:
-                            tool_round_limit_hit = True
+                            state.tool_round_limit_hit = True
 
                         messages.append(
 
@@ -957,7 +999,7 @@ async def run_openai_agent(
 
                             )
 
-                        if not tool_round_limit_hit:
+                        if not state.tool_round_limit_hit:
                             continue
                         messages.append(
                             {
@@ -972,24 +1014,19 @@ async def run_openai_agent(
 
 
 
-                    final_text = stream_result.text.strip()
+                    state.final_text = stream_result.text.strip()
 
                     break
 
 
 
-                if not final_text:
+                if not state.final_text:
 
                     # 某些中转在带 tools 时会返回空文本，但不报错。
 
                     # 这里退化成纯文本 chat/completions 再试一次，优先保证基础问答可用。
 
-                    fallback_payload = _apply_openai_compat_options({
-                        "model": get_effective_model("openai"),
-                        "messages": messages,
-                        "stream": True,
-                        "temperature": 0.7,
-                    })
+                    fallback_payload = _chat_payload(messages, stream=True, temperature=0.7)
 
                     try:
                         fallback_result = await stream_chat_completion(
@@ -1004,44 +1041,30 @@ async def run_openai_agent(
 
                         )
                     except httpx.ReadTimeout:
-                        timeout_seen = True
+                        state.timeout_seen = True
                         logger.warning("OpenAI fallback stream timed out; trying non-stream fallback.")
                         fallback_result = None
 
                     if fallback_result is not None:
-                        last_stream_preview = fallback_result.raw_preview
+                        state.note_stream_result(fallback_result, phase="fallback")
                         if fallback_result.tool_calls:
-                            tool_round_limit_hit = True
+                            state.tool_round_limit_hit = True
                             logger.info(
                                 "OpenAI fallback returned tool calls after tool round limit: calls=%s",
                                 [call.name for call in fallback_result.tool_calls],
                             )
-                        if not fallback_result.text and fallback_result.reasoning_chunk_count:
-                            reasoning_only_seen = True
-                            logger.info(
-                                "OpenAI stream returned reasoning-only chunks: phase=fallback chunks=%s reasoning_chunks=%s reasoning_preview=%r",
-                                fallback_result.chunk_count,
-                                fallback_result.reasoning_chunk_count,
-                                fallback_result.reasoning_text[:160],
-                            )
-
-                        final_text = fallback_result.text.strip()
+                        state.final_text = fallback_result.text.strip()
 
 
-                if not final_text:
+                if not state.final_text:
 
                     # Some OpenAI-compatible reasoning models stream reasoning_content
                     # without content. Non-streaming replies are often more stable for
                     # the final assistant message, especially after image turns.
-                    non_stream_payload = _apply_openai_compat_options({
-                        "model": get_effective_model("openai"),
-                        "messages": messages,
-                        "stream": False,
-                        "temperature": 0.7,
-                    })
+                    non_stream_payload = _chat_payload(messages, stream=False, temperature=0.7)
 
                     try:
-                        final_text = await call_chat_completion(
+                        state.final_text = await call_chat_completion(
 
                             client,
 
@@ -1053,32 +1076,16 @@ async def run_openai_agent(
 
                         )
                     except httpx.ReadTimeout:
-                        timeout_seen = True
+                        state.timeout_seen = True
                         logger.warning("OpenAI non-stream fallback timed out.")
 
 
 
-                if not final_text:
-                    if reasoning_only_seen:
-                        final_text = (
-                            "模型服务这次只返回了 reasoning_content，没有返回最终答复内容。"
-                            "我已经避免把推理过程直接展示出来。请重试一次，或将 OPENAI_CHAT_DISABLE_REASONING=1 后重启；"
-                            "如果仍复现，建议把当前 qwen reasoning 模型切到非 thinking 模式/非 reasoning 模型。"
-                        )
-                    elif timeout_seen:
-                        final_text = (
-                            "模型服务这次响应超时，工具授权和执行流程已经开始，但模型没有在超时时间内返回最终答复。"
-                            "请稍后重试，或把任务拆小一点；如果经常发生，可以调大 OPENAI_CHAT_TIMEOUT_SECONDS 后重启。"
-                        )
-                    elif tool_round_limit_hit:
-                        final_text = (
-                            "模型连续请求调用工具，已达到本次会话的工具调用轮次上限。"
-                            "我已停止继续执行更多工具，避免任务陷入循环。请把目标拆小一点再试，"
-                            "或调大 OPENAI_TOOL_CALL_MAX_ROUNDS 后重启。"
-                        )
-                    else:
+                if not state.final_text:
+                    state.final_text = state.user_visible_fallback()
+                    if not state.final_text:
 
-                        logger.warning("OpenAI empty response preview: %s", last_stream_preview)
+                        logger.warning("OpenAI empty response preview: %s", state.last_stream_preview or [])
 
     except Exception:
 
@@ -1088,12 +1095,12 @@ async def run_openai_agent(
 
 
 
-    if not final_text:
+    if not state.final_text:
 
         raise RuntimeError("OpenAI service returned an empty response.")
 
 
 
-    append_conversation_record(record_text or prompt, final_text, None if not continue_session else "openai", session_scope)
+    append_conversation_record(record_text or prompt, state.final_text, None if not continue_session else "openai", session_scope)
 
-    return AgentReply.from_text(final_text)
+    return AgentReply.from_text(state.final_text)
