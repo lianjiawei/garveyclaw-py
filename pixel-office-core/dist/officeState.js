@@ -22,6 +22,7 @@ export class OfficeState {
         this.blockedTiles = getBlockedTiles(this.layout.furniture);
         this.furniture = layoutToFurnitureInstances(this.layout.furniture);
         this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles);
+        this.rebuildFurnitureInstances();
     }
     getLayout() {
         return this.layout;
@@ -53,6 +54,7 @@ export class OfficeState {
                 this.moveCharacterToWalkable(ch.id);
             }
         }
+        this.rebuildFurnitureInstances();
     }
     update(dt) {
         const prevFrame = Math.floor(this.furnitureAnimTimer / FURNITURE_ANIM_INTERVAL_SEC);
@@ -291,6 +293,12 @@ export class OfficeState {
     rebuildFurnitureInstances() {
         const autoOnTiles = new Set();
         const activeSeats = [];
+        const workSeats = [];
+        const electronicsTiles = this.getElectronicsTiles();
+        for (const seat of this.seats.values()) {
+            if (this.isWorkSeat(seat, electronicsTiles))
+                workSeats.push(seat);
+        }
         for (const ch of this.characters.values()) {
             if (!ch.isActive || !ch.seatId)
                 continue;
@@ -316,7 +324,7 @@ export class OfficeState {
                 }
             }
         }
-        if (autoOnTiles.size === 0 && activeSeats.length === 0) {
+        if (autoOnTiles.size === 0 && activeSeats.length === 0 && workSeats.length === 0) {
             this.furniture = layoutToFurnitureInstances(this.layout.furniture);
             return;
         }
@@ -325,7 +333,9 @@ export class OfficeState {
             const entry = getCatalogEntry(item.type);
             if (!entry)
                 return item;
-            const isNearbyElectronics = entry.category === 'electronics' && this.isFurnitureNearAnySeat(item, entry.footprintW, entry.footprintH, activeSeats);
+            const isNearbyElectronics = entry.category === 'electronics' &&
+                (this.isFurnitureNearAnySeat(item, entry.footprintW, entry.footprintH, activeSeats) ||
+                    this.isFurnitureNearAnySeat(item, entry.footprintW, entry.footprintH, workSeats));
             for (let dr = 0; dr < entry.footprintH; dr++) {
                 for (let dc = 0; dc < entry.footprintW; dc++) {
                     if (isNearbyElectronics || autoOnTiles.has(`${item.col + dc},${item.row + dr}`)) {
