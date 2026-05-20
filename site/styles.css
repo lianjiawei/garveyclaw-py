@@ -28,8 +28,8 @@ html {
 body {
   margin: 0;
   background:
-    radial-gradient(ellipse 460px 220px at 8% 10%, rgba(255, 95, 109, 0.08), transparent 68%),
-    radial-gradient(ellipse 520px 260px at 92% 22%, rgba(13, 107, 67, 0.09), transparent 66%),
+    radial-gradient(ellipse 520px 250px at 8% 10%, rgba(255, 95, 109, 0.045), transparent 70%),
+    radial-gradient(ellipse 620px 300px at 92% 22%, rgba(13, 107, 67, 0.055), transparent 68%),
     var(--bg);
   color: var(--ink);
   font-family:
@@ -42,16 +42,12 @@ body::before {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    radial-gradient(ellipse at center, rgba(20, 34, 27, 0.13) 0 34%, transparent 36%),
-    radial-gradient(ellipse at center, rgba(255, 95, 109, 0.1) 0 28%, transparent 31%);
+  background-image: url("data:image/svg+xml,%3Csvg width='420' height='320' viewBox='0 0 420 320' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke-linejoin='round' stroke-linecap='round'%3E%3Cg opacity='.46'%3E%3Cpath d='M42 42 86 64 50 96Z' stroke='%230d6b43' stroke-width='6'/%3E%3Cpath d='M50 53 76 65 54 84Z' fill='%23ff5f6d' stroke='none' opacity='.68'/%3E%3C/g%3E%3Cg opacity='.3' transform='translate(236 178) rotate(-18)'%3E%3Cpath d='M0 0 38 18 8 46Z' stroke='%230d6b43' stroke-width='5'/%3E%3Cpath d='M8 9 29 18 11 34Z' fill='%23ff5f6d' stroke='none' opacity='.58'/%3E%3C/g%3E%3Cg opacity='.22' transform='translate(326 42) rotate(16)'%3E%3Cpath d='M0 0 48 24 10 58Z' stroke='%230d6b43' stroke-width='5'/%3E%3Cpath d='M9 12 37 24 14 43Z' fill='%23ff5f6d' stroke='none' opacity='.5'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
   background-position:
-    42px 74px,
-    168px 198px;
+    24px 68px;
   background-size:
-    226px 172px,
-    312px 248px;
-  opacity: 0.09;
+    640px 488px;
+  opacity: 0.08;
   content: "";
 }
 
@@ -87,12 +83,13 @@ a {
   width: 38px;
   height: 38px;
   place-items: center;
-  border: 1px solid rgba(13, 107, 67, 0.34);
-  border-radius: 999px;
+  border: 1px solid rgba(139, 224, 176, 0.28);
+  border-radius: 12px;
   background:
-    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.42), transparent 27%),
-    #0f5132;
-  box-shadow: 0 10px 24px rgba(13, 107, 67, 0.2);
+    linear-gradient(145deg, rgba(255, 95, 109, 0.16), transparent 38%),
+    radial-gradient(circle at 28% 22%, rgba(139, 224, 176, 0.22), transparent 28%),
+    linear-gradient(145deg, #0a2a1d, #07130f);
+  box-shadow: 0 12px 28px rgba(13, 107, 67, 0.22);
 }
 
 .logo-mark svg {
@@ -100,36 +97,39 @@ a {
   height: 31px;
 }
 
-.logo-rind {
-  fill: #0a6b3f;
+.logo-frame {
+  fill: rgba(13, 107, 67, 0.95);
 }
 
-.logo-flesh {
-  fill: var(--watermelon);
-  stroke: #f5ffd9;
-  stroke-width: 4;
+.logo-core {
+  fill: #08130f;
+  stroke: rgba(139, 224, 176, 0.5);
+  stroke-width: 1.2;
 }
 
 .logo-w,
-.logo-smile {
+.logo-accent,
+.logo-signal {
   fill: none;
-  stroke: #fff9e8;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .logo-w {
-  stroke-width: 5;
+  stroke: #f8fff4;
+  stroke-width: 4.4;
 }
 
-.logo-smile {
-  opacity: 0.72;
+.logo-accent {
+  stroke: var(--watermelon);
+  stroke-width: 3.2;
+  opacity: 0.9;
+}
+
+.logo-signal {
+  stroke: var(--mint);
   stroke-width: 3;
-}
-
-.logo-seed {
-  fill: #15221a;
-  opacity: 0.84;
+  opacity: 0.85;
 }
 
 .nav {
@@ -183,7 +183,7 @@ a {
   right: clamp(18px, 5vw, 74px);
   width: 190px;
   height: 94px;
-  border: 13px solid rgba(13, 107, 67, 0.11);
+  border: 13px solid rgba(13, 107, 67, 0.07);
   border-bottom: 0;
   transform: rotate(-16deg);
 }
@@ -193,7 +193,7 @@ a {
   left: clamp(18px, 7vw, 100px);
   width: 120px;
   height: 60px;
-  border: 10px solid rgba(255, 95, 109, 0.1);
+  border: 10px solid rgba(255, 95, 109, 0.065);
   border-bottom: 0;
   transform: rotate(14deg);
 }
