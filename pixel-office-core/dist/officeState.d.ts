@@ -43,6 +43,9 @@ export declare class OfficeState {
     private findFreeSeat;
     private findFreeWorkSeat;
     private isWorkSeat;
+    private isLoungeSeat;
+    private getSeatFurniture;
     private getElectronicsTiles;
     private seatFacesElectronics;
+    private seatNearElectronics;
 }

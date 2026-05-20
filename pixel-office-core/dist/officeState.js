@@ -450,7 +450,7 @@ export class OfficeState {
         for (const [seatId, seat] of this.seats) {
             if (seat.assigned)
                 continue;
-            (this.seatFacesElectronics(seat, electronicsTiles) ? preferred : fallback).push(seatId);
+            (this.isWorkSeat(seat, electronicsTiles) ? preferred : fallback).push(seatId);
         }
         if (preferred.length > 0)
             return preferred[Math.floor(Math.random() * preferred.length)];
@@ -464,15 +464,25 @@ export class OfficeState {
         for (const [seatId, seat] of this.seats) {
             if (seat.assigned)
                 continue;
-            if (this.seatFacesElectronics(seat, electronicsTiles))
+            if (this.isWorkSeat(seat, electronicsTiles))
                 preferred.push(seatId);
         }
         if (preferred.length > 0)
             return preferred[Math.floor(Math.random() * preferred.length)];
         return null;
     }
-    isWorkSeat(seat) {
-        return this.seatFacesElectronics(seat, this.getElectronicsTiles());
+    isWorkSeat(seat, electronicsTiles = this.getElectronicsTiles()) {
+        if (this.isLoungeSeat(seat))
+            return false;
+        return this.seatFacesElectronics(seat, electronicsTiles) || this.seatNearElectronics(seat, electronicsTiles);
+    }
+    isLoungeSeat(seat) {
+        const source = this.getSeatFurniture(seat);
+        return !!source && source.type.startsWith('SOFA');
+    }
+    getSeatFurniture(seat) {
+        const sourceUid = seat.uid.split(':')[0];
+        return this.layout.furniture.find((item) => item.uid === sourceUid);
     }
     getElectronicsTiles() {
         const electronicsTiles = new Set();
@@ -503,6 +513,17 @@ export class OfficeState {
             }
             else if (electronicsTiles.has(`${tileCol - 1},${tileRow}`) ||
                 electronicsTiles.has(`${tileCol + 1},${tileRow}`)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    seatNearElectronics(seat, electronicsTiles) {
+        for (const key of electronicsTiles) {
+            const [col, row] = key.split(',').map((part) => Number(part));
+            if (!Number.isFinite(col) || !Number.isFinite(row))
+                continue;
+            if (Math.abs(seat.seatCol - col) + Math.abs(seat.seatRow - row) <= ELECTRONICS_AUTO_ON_DISTANCE) {
                 return true;
             }
         }
