@@ -42,12 +42,12 @@ body::before {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg width='420' height='320' viewBox='0 0 420 320' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke-linejoin='round' stroke-linecap='round'%3E%3Cg opacity='.46'%3E%3Cpath d='M42 42 86 64 50 96Z' stroke='%230d6b43' stroke-width='6'/%3E%3Cpath d='M50 53 76 65 54 84Z' fill='%23ff5f6d' stroke='none' opacity='.68'/%3E%3C/g%3E%3Cg opacity='.3' transform='translate(236 178) rotate(-18)'%3E%3Cpath d='M0 0 38 18 8 46Z' stroke='%230d6b43' stroke-width='5'/%3E%3Cpath d='M8 9 29 18 11 34Z' fill='%23ff5f6d' stroke='none' opacity='.58'/%3E%3C/g%3E%3Cg opacity='.22' transform='translate(326 42) rotate(16)'%3E%3Cpath d='M0 0 48 24 10 58Z' stroke='%230d6b43' stroke-width='5'/%3E%3Cpath d='M9 12 37 24 14 43Z' fill='%23ff5f6d' stroke='none' opacity='.5'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg width='960' height='620' viewBox='0 0 960 620' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke-linejoin='round' stroke-linecap='round'%3E%3Cg opacity='.52' transform='translate(76 78) rotate(-8)'%3E%3Cpath d='M60 0 124 150Q66 174 8 150Z' fill='%23ff5f6d' fill-opacity='.34'/%3E%3Cpath d='M8 150Q66 174 124 150' stroke='%230d6b43' stroke-width='13' stroke-opacity='.45'/%3E%3Cpath d='M14 148Q66 166 118 148' stroke='%23dcefd9' stroke-width='7' stroke-opacity='.55'/%3E%3Cellipse cx='58' cy='70' rx='5' ry='9' fill='%2314221b' fill-opacity='.15' transform='rotate(-18 58 70)'/%3E%3Cellipse cx='82' cy='92' rx='5' ry='9' fill='%2314221b' fill-opacity='.12' transform='rotate(14 82 92)'/%3E%3C/g%3E%3Cg opacity='.34' transform='translate(724 96) scale(.72) rotate(10)'%3E%3Cpath d='M60 0 124 150Q66 174 8 150Z' fill='%23ff5f6d' fill-opacity='.28'/%3E%3Cpath d='M8 150Q66 174 124 150' stroke='%230d6b43' stroke-width='13' stroke-opacity='.38'/%3E%3Cpath d='M14 148Q66 166 118 148' stroke='%23dcefd9' stroke-width='7' stroke-opacity='.5'/%3E%3C/g%3E%3Cg opacity='.28' transform='translate(582 456) scale(.62) rotate(-16)'%3E%3Cpath d='M60 0 124 150Q66 174 8 150Z' fill='%23ff5f6d' fill-opacity='.25'/%3E%3Cpath d='M8 150Q66 174 124 150' stroke='%230d6b43' stroke-width='13' stroke-opacity='.35'/%3E%3Cpath d='M14 148Q66 166 118 148' stroke='%23dcefd9' stroke-width='7' stroke-opacity='.46'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
   background-position:
-    24px 68px;
+    center 34px;
   background-size:
-    640px 488px;
-  opacity: 0.08;
+    1280px 827px;
+  opacity: 0.16;
   content: "";
 }
 
@@ -83,12 +83,13 @@ a {
   width: 38px;
   height: 38px;
   place-items: center;
-  border: 1px solid rgba(139, 224, 176, 0.28);
-  border-radius: 12px;
+  border: 1px solid rgba(139, 224, 176, 0.35);
+  border-radius: 999px;
   background:
-    linear-gradient(145deg, rgba(255, 95, 109, 0.16), transparent 38%),
-    radial-gradient(circle at 28% 22%, rgba(139, 224, 176, 0.22), transparent 28%),
-    linear-gradient(145deg, #0a2a1d, #07130f);
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.18), transparent 18%),
+    radial-gradient(circle at 65% 72%, rgba(255, 95, 109, 0.3), transparent 20%),
+    linear-gradient(135deg, rgba(139, 224, 176, 0.2), transparent 42%),
+    linear-gradient(145deg, #0d6b43, #062217 72%);
   box-shadow: 0 12px 28px rgba(13, 107, 67, 0.22);
 }
 
@@ -97,39 +98,33 @@ a {
   height: 31px;
 }
 
-.logo-frame {
-  fill: rgba(13, 107, 67, 0.95);
+.logo-w-body {
+  fill: #f8fff4;
 }
 
-.logo-core {
-  fill: #08130f;
-  stroke: rgba(139, 224, 176, 0.5);
-  stroke-width: 1.2;
-}
-
-.logo-w,
-.logo-accent,
-.logo-signal {
+.logo-watermelon-flesh,
+.logo-watermelon-rind,
+.logo-circuit {
   fill: none;
   stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
-.logo-w {
-  stroke: #f8fff4;
-  stroke-width: 4.4;
-}
-
-.logo-accent {
+.logo-watermelon-flesh {
   stroke: var(--watermelon);
-  stroke-width: 3.2;
-  opacity: 0.9;
+  stroke-width: 4.4;
+  opacity: 0.72;
 }
 
-.logo-signal {
+.logo-watermelon-rind {
   stroke: var(--mint);
-  stroke-width: 3;
-  opacity: 0.85;
+  stroke-width: 1.7;
+  opacity: 0.7;
+}
+
+.logo-circuit {
+  stroke: #083221;
+  stroke-width: 1.4;
+  opacity: 0.46;
 }
 
 .nav {
