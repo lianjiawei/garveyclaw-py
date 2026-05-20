@@ -156,7 +156,7 @@ def _select_agents(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             cluster_agents,
             key=lambda item: _sort_key(str(item.get("role") or item.get("agent_id") or "")),
         )
-        return ordered_cluster_agents + [_main_agent_entry(snapshot)]
+        return ordered_cluster_agents + [_main_agent_entry(snapshot, cluster_active=True)]
 
 
 
@@ -164,9 +164,11 @@ def _select_agents(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 
-def _main_agent_entry(snapshot: dict[str, Any]) -> dict[str, Any]:
+def _main_agent_entry(snapshot: dict[str, Any], *, cluster_active: bool = False) -> dict[str, Any]:
 
     main = dict(snapshot.get("agent") or {})
+    status = "idle" if cluster_active else main.get("state") or "idle"
+    summary = "" if cluster_active else main.get("current_tool") or main.get("tool_status") or main.get("current_task") or ""
 
     return {
 
@@ -176,9 +178,9 @@ def _main_agent_entry(snapshot: dict[str, Any]) -> dict[str, Any]:
 
         "role": "primary",
 
-        "status": main.get("state") or "idle",
+        "status": status,
 
-        "summary": main.get("current_tool") or main.get("tool_status") or main.get("current_task") or "",
+        "summary": summary,
 
     }
 
