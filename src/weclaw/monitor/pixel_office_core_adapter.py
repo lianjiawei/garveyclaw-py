@@ -90,6 +90,8 @@ def build_pixel_office_core_payload(snapshot: dict[str, Any] | None = None) -> d
 
     snapshot = snapshot or build_agent_activity_snapshot()
 
+    cluster_state = str((snapshot.get("cluster") or {}).get("state") or "idle").lower()
+
     agent_entries = _select_agents(snapshot)
 
     commands: list[dict[str, Any]] = [
@@ -110,7 +112,7 @@ def build_pixel_office_core_payload(snapshot: dict[str, Any] | None = None) -> d
 
     for entry in agent_entries:
 
-        command = _mode_command(entry)
+        command = _mode_command(entry, cluster_state=cluster_state)
 
         status_command = _status_command(entry)
 
@@ -134,7 +136,7 @@ def build_pixel_office_core_payload(snapshot: dict[str, Any] | None = None) -> d
 
         "commands": commands,
 
-        "agents": [_display_agent(entry) for entry in agent_entries],
+        "agents": [_display_agent(entry, cluster_state=cluster_state) for entry in agent_entries],
 
         "cluster": snapshot.get("cluster") or {},
 
@@ -150,29 +152,35 @@ def _select_agents(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
 
     if cluster_agents:
 
-        return sorted(cluster_agents, key=lambda item: _sort_key(str(item.get("role") or item.get("agent_id") or "")))
+        ordered_cluster_agents = sorted(
+            cluster_agents,
+            key=lambda item: _sort_key(str(item.get("role") or item.get("agent_id") or "")),
+        )
+        return ordered_cluster_agents + [_main_agent_entry(snapshot)]
 
 
+
+    return [_main_agent_entry(snapshot)]
+
+
+
+def _main_agent_entry(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     main = dict(snapshot.get("agent") or {})
 
-    return [
+    return {
 
-        {
+        "agent_id": main.get("agent_id") or "main",
 
-            "agent_id": main.get("agent_id") or "main",
+        "name": main.get("name") or "Weclaw",
 
-            "name": main.get("name") or "Weclaw",
+        "role": "primary",
 
-            "role": "primary",
+        "status": main.get("state") or "idle",
 
-            "status": main.get("state") or "idle",
+        "summary": main.get("current_tool") or main.get("tool_status") or main.get("current_task") or "",
 
-            "summary": main.get("current_tool") or main.get("tool_status") or main.get("current_task") or "",
-
-        }
-
-    ]
+    }
 
 
 
@@ -210,7 +218,7 @@ def _agent_input(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 
-def _mode_command(entry: dict[str, Any]) -> dict[str, Any]:
+def _mode_command(entry: dict[str, Any], *, cluster_state: str = "idle") -> dict[str, Any]:
 
     return {
 
@@ -218,7 +226,7 @@ def _mode_command(entry: dict[str, Any]) -> dict[str, Any]:
 
         "id": _numeric_id(entry),
 
-        "mode": _mode_for_entry(entry),
+        "mode": _mode_for_entry(entry, cluster_state=cluster_state),
 
         "tool": _tool_for_entry(entry),
 
@@ -228,7 +236,7 @@ def _mode_command(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 
-def _display_agent(entry: dict[str, Any]) -> dict[str, Any]:
+def _display_agent(entry: dict[str, Any], *, cluster_state: str = "idle") -> dict[str, Any]:
 
     return {
 
@@ -242,7 +250,7 @@ def _display_agent(entry: dict[str, Any]) -> dict[str, Any]:
 
         "status": _status(entry),
 
-        "mode": _mode_for_entry(entry),
+        "mode": _mode_for_entry(entry, cluster_state=cluster_state),
 
         "summary": str(entry.get("summary") or ""),
 
@@ -294,7 +302,7 @@ def _status(entry: dict[str, Any]) -> str:
 
 
 
-def _mode_for_entry(entry: dict[str, Any]) -> str:
+def _mode_for_entry(entry: dict[str, Any], *, cluster_state: str = "idle") -> str:
 
     status = _status(entry)
 
@@ -323,6 +331,10 @@ def _mode_for_entry(entry: dict[str, Any]) -> str:
     if status == "error":
 
         return "blocked"
+
+    if status == "done" and cluster_state in {"queued", "planning", "working", "reviewing", "waiting"}:
+
+        return "thinking"
 
     return "idle"
 
