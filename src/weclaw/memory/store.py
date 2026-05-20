@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
@@ -11,13 +10,11 @@ from typing import Any
 
 
 from weclaw.config import (
+    AGENT_PROVIDER as _CONFIG_AGENT_PROVIDER,
+    ANTHROPIC_API_KEY as _CONFIG_ANTHROPIC_API_KEY,
     CLAUDE_MEMORY_FILE,
     CONVERSATIONS_DIR,
     CONVERSATION_RETENTION_DAYS,
-    AGENT_PROVIDER,
-    ANTHROPIC_API_KEY,
-    ANTHROPIC_BASE_URL,
-    ANTHROPIC_MODEL,
     LONG_TERM_MEMORY_DIR,
     MEMORY_ARCHIVE_DIR,
     MEMORY_ARCHIVE_AFTER_DAYS,
@@ -31,6 +28,18 @@ from weclaw.config import (
     WORKING_STATE_FILE,
     WORKSPACE_DIR,
 )
+from weclaw.memory.io import (
+    append_text_locked,
+    locked_path,
+    read_json_locked,
+    read_text_locked,
+    read_text_unlocked,
+    unlink_locked,
+    update_json_locked,
+    write_json_atomic,
+    write_text_atomic,
+    write_text_atomic_unlocked,
+)
 from weclaw.memory.frequency import (
     calculate_memory_importance,
 
@@ -38,13 +47,20 @@ from weclaw.memory.frequency import (
 
     load_frequency_state,
 
+    load_importance_state,
+
     save_importance_state,
 
     update_memory_frequency,
 
 )
+from weclaw.memory.reflection import run_reflection_model
 
 logger = logging.getLogger(__name__)
+
+# Compatibility hooks for older tests/extensions that monkeypatch these module attributes.
+AGENT_PROVIDER = _CONFIG_AGENT_PROVIDER
+ANTHROPIC_API_KEY = _CONFIG_ANTHROPIC_API_KEY
 
 
 
@@ -62,7 +78,7 @@ def _load_reflection_prompt() -> str | None:
 
     if path.exists():
 
-        return path.read_text(encoding="utf-8")
+        return read_text_locked(path)
 
     return None
 
@@ -290,9 +306,7 @@ def _build_structured_entries(category: str, sections: list[list[str]]) -> list[
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    append_text_locked(path, json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def _archive_sections(category: str, sections: list[list[str]], reason: str) -> Path | None:
@@ -300,11 +314,11 @@ def _archive_sections(category: str, sections: list[list[str]], reason: str) -> 
         return None
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     target = MEMORY_ARCHIVE_DIR / f"{category}_{reason}_{timestamp}.md"
-    lines = [f"# Archived Memory Sections", f"", f"- category: {category}", f"- reason: {reason}", f"- archived_at: {datetime.now().isoformat(timespec='seconds')}", ""]
+    lines = ["# Archived Memory Sections", "", f"- category: {category}", f"- reason: {reason}", f"- archived_at: {datetime.now().isoformat(timespec='seconds')}", ""]
     for section in sections:
         lines.extend(section)
         lines.append("")
-    target.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    write_text_atomic(target, "\n".join(lines).rstrip() + "\n")
     return target
 
 
@@ -378,7 +392,8 @@ def ensure_memory_files() -> None:
 
     if not CLAUDE_MEMORY_FILE.exists():
 
-        CLAUDE_MEMORY_FILE.write_text(
+        write_text_atomic(
+            CLAUDE_MEMORY_FILE,
 
             "# 长期记忆\n\n"
 
@@ -406,8 +421,6 @@ def ensure_memory_files() -> None:
 
             "- 需要长期复用的信息优先结构化沉淀，而不是只追加原始日志。\n",
 
-            encoding="utf-8",
-
         )
 
 
@@ -426,13 +439,13 @@ def ensure_memory_files() -> None:
 
         if not path.exists():
 
-            path.write_text(defaults[key], encoding="utf-8")
+            write_text_atomic(path, defaults[key])
 
 
 
     if not WORKING_STATE_FILE.exists():
 
-        WORKING_STATE_FILE.write_text(json.dumps(DEFAULT_WORKING_STATE, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json_atomic(WORKING_STATE_FILE, DEFAULT_WORKING_STATE)
 
 
 
@@ -440,32 +453,15 @@ def ensure_memory_files() -> None:
 
     if not default_summary_file.exists():
 
-        default_summary_file.write_text(
-
-            json.dumps(
-
-                {
-
-                    "session_scope": "default",
-
-                    "updated_at": "",
-
-                    "latest_user_message": "",
-
-                    "latest_assistant_reply_excerpt": "",
-
-                    "recent_topics": [],
-
-                },
-
-                ensure_ascii=False,
-
-                indent=2,
-
-            ),
-
-            encoding="utf-8",
-
+        write_json_atomic(
+            default_summary_file,
+            {
+                "session_scope": "default",
+                "updated_at": "",
+                "latest_user_message": "",
+                "latest_assistant_reply_excerpt": "",
+                "recent_topics": [],
+            },
         )
 
 
@@ -473,20 +469,7 @@ def ensure_memory_files() -> None:
 
 
 def _read_json_file(path: Path, fallback: dict[str, Any]) -> dict[str, Any]:
-
-    if not path.exists():
-
-        return dict(fallback)
-
-    try:
-
-        data = json.loads(path.read_text(encoding="utf-8"))
-
-    except (OSError, json.JSONDecodeError):
-
-        return dict(fallback)
-
-    return data if isinstance(data, dict) else dict(fallback)
+    return read_json_locked(path, fallback)
 
 
 
@@ -694,72 +677,66 @@ def _merge_structured_memory(
     slot: str | None = None,
     metadata: MemoryMetadata | None = None,
 ) -> bool:
-    existing = path.read_text(encoding="utf-8") if path.exists() else ""
-    normalized_note = _normalize_memory_note(note)
-    if normalized_note in existing:
-        return False
+    with locked_path(path):
+        existing = read_text_unlocked(path)
+        normalized_note = _normalize_memory_note(note)
+        if normalized_note in existing:
+            return False
 
-    preamble, sections = _split_markdown_sections(existing)
-    existing_entries = _build_structured_entries(category, sections)
+        preamble, sections = _split_markdown_sections(existing)
+        existing_entries = _build_structured_entries(category, sections)
 
-    filtered_sections: list[list[str]] = []
-    supersedes = list(metadata.supersedes) if metadata is not None else []
-    removed_sections: list[list[str]] = []
-    for section in sections:
-        section_slot = _section_slot(section)
-        if slot and section_slot == slot:
-            if f"slot:{slot}" not in supersedes:
-                supersedes.append(f"slot:{slot}")
-            removed_sections.append(section)
-            continue
-        filtered_sections.append(section)
+        filtered_sections: list[list[str]] = []
+        supersedes = list(metadata.supersedes) if metadata is not None else []
+        removed_sections: list[list[str]] = []
+        for section in sections:
+            section_slot = _section_slot(section)
+            if slot and section_slot == slot:
+                if f"slot:{slot}" not in supersedes:
+                    supersedes.append(f"slot:{slot}")
+                removed_sections.append(section)
+                continue
+            filtered_sections.append(section)
 
-    if metadata is not None and tuple(supersedes) != metadata.supersedes:
-        metadata = MemoryMetadata(
-            source=metadata.source,
-            confidence=metadata.confidence,
-            scope=metadata.scope,
-            valid_from=metadata.valid_from,
-            valid_until=metadata.valid_until,
-            last_confirmed_at=metadata.last_confirmed_at,
-            supersedes=tuple(supersedes),
-            tags=metadata.tags,
-            reason=metadata.reason,
-        )
+        if metadata is not None and tuple(supersedes) != metadata.supersedes:
+            metadata = MemoryMetadata(
+                source=metadata.source,
+                confidence=metadata.confidence,
+                scope=metadata.scope,
+                valid_from=metadata.valid_from,
+                valid_until=metadata.valid_until,
+                last_confirmed_at=metadata.last_confirmed_at,
+                supersedes=tuple(supersedes),
+                tags=metadata.tags,
+                reason=metadata.reason,
+            )
 
-    if slot and removed_sections:
-        previous_entries = [entry for entry in existing_entries if entry.slot == slot]
-        if previous_entries:
-            _log_memory_conflict(category, slot, previous_entries[-1], normalized_note, metadata)
-        _archive_sections(category, removed_sections, "superseded")
+        if slot and removed_sections:
+            previous_entries = [entry for entry in existing_entries if entry.slot == slot]
+            if previous_entries:
+                _log_memory_conflict(category, slot, previous_entries[-1], normalized_note, metadata)
+            _archive_sections(category, removed_sections, "superseded")
 
-    new_section = [f"## 自动记忆 {timestamp}"]
-    if slot:
-        new_section.append(f"<!-- slot:{slot} -->")
-    serialized_metadata = _serialize_memory_metadata(metadata)
-    if serialized_metadata:
-        new_section.append(f"<!-- memory-meta:{serialized_metadata} -->")
-    new_section.append(f"- {normalized_note}")
-    filtered_sections.append(new_section)
+        new_section = [f"## 自动记忆 {timestamp}"]
+        if slot:
+            new_section.append(f"<!-- slot:{slot} -->")
+        serialized_metadata = _serialize_memory_metadata(metadata)
+        if serialized_metadata:
+            new_section.append(f"<!-- memory-meta:{serialized_metadata} -->")
+        new_section.append(f"- {normalized_note}")
+        filtered_sections.append(new_section)
 
-
-    rebuilt_lines = list(preamble)
-
-    if rebuilt_lines and rebuilt_lines[-1].strip() != "":
-
-        rebuilt_lines.append("")
-
-    for index, section in enumerate(filtered_sections):
-
+        rebuilt_lines = list(preamble)
         if rebuilt_lines and rebuilt_lines[-1].strip() != "":
-
             rebuilt_lines.append("")
 
-        rebuilt_lines.extend(section)
+        for section in filtered_sections:
+            if rebuilt_lines and rebuilt_lines[-1].strip() != "":
+                rebuilt_lines.append("")
+            rebuilt_lines.extend(section)
 
-    path.write_text("\n".join(rebuilt_lines).rstrip() + "\n", encoding="utf-8")
-
-    return True
+        write_text_atomic_unlocked(path, "\n".join(rebuilt_lines).rstrip() + "\n")
+        return True
 
 
 
@@ -769,7 +746,7 @@ def load_long_term_memory() -> str:
 
     ensure_memory_files()
 
-    return CLAUDE_MEMORY_FILE.read_text(encoding="utf-8")
+    return read_text_locked(CLAUDE_MEMORY_FILE)
 
 
 
@@ -781,9 +758,7 @@ def append_long_term_memory(note: str) -> None:
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    with CLAUDE_MEMORY_FILE.open("a", encoding="utf-8") as file:
-
-        file.write(f"\n## 追加记忆 {timestamp}\n- {note.strip()}\n")
+    append_text_locked(CLAUDE_MEMORY_FILE, f"\n## 追加记忆 {timestamp}\n- {note.strip()}\n")
 
 
 
@@ -847,7 +822,7 @@ def append_memory_candidate(
             else:
                 metadata_lines.append(f"- {key}: {value}")
     metadata_block = "\n".join(metadata_lines)
-    target.write_text(f"# Memory Candidate\n\n{metadata_block}\n\n{note.strip()}\n", encoding="utf-8")
+    write_text_atomic(target, f"# Memory Candidate\n\n{metadata_block}\n\n{note.strip()}\n")
     return target
 
 
@@ -884,7 +859,7 @@ def accept_memory_candidate(name: str, category: str = "general", slot: str | No
 
 
 
-    content = candidate.read_text(encoding="utf-8").strip()
+    content = read_text_locked(candidate).strip()
     body = content.split("\n\n", maxsplit=2)[-1].strip() if content else ""
     safe_category = re.sub(r"[^a-zA-Z0-9_-]+", "_", category.strip()).strip("_") or "general"
     parsed_metadata = _parse_candidate_metadata(content)
@@ -903,7 +878,7 @@ def accept_memory_candidate(name: str, category: str = "general", slot: str | No
     target = append_structured_long_term_memory(body, safe_category, slot, candidate_metadata)
 
 
-    candidate.unlink()
+    unlink_locked(candidate)
 
     return target
 
@@ -919,7 +894,7 @@ def reject_memory_candidate(name: str) -> None:
 
         raise FileNotFoundError(name)
 
-    candidate.unlink()
+    unlink_locked(candidate)
 
 
 
@@ -953,7 +928,7 @@ def save_working_state(state: dict[str, Any], scope: str | None = None) -> None:
 
     payload["updated_at"] = datetime.now().isoformat(timespec="seconds")
 
-    get_working_state_file(scope).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_atomic(get_working_state_file(scope), payload)
 
 
 
@@ -1071,33 +1046,29 @@ def load_session_summary(scope: str | None = None) -> dict[str, Any]:
 
 def save_session_summary(scope: str | None, user_message: str, assistant_reply: str) -> None:
     ensure_memory_files()
-
-    summary = load_session_summary(scope)
-
-    recent_topics = list(summary.get("recent_topics") or [])
-
-    compact_user_message = user_message.strip().replace("\n", " ")
-
-    if compact_user_message:
-
-        recent_topics.append(compact_user_message[:80])
-
-    recent_topics = recent_topics[-5:]
-
-    payload = {
-
+    fallback = {
         "session_scope": _sanitize_scope(scope),
-
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-
-        "latest_user_message": compact_user_message[:500],
-
-        "latest_assistant_reply_excerpt": assistant_reply.strip().replace("\n", " ")[:800],
-
-        "recent_topics": recent_topics,
-
+        "updated_at": "",
+        "latest_user_message": "",
+        "latest_assistant_reply_excerpt": "",
+        "recent_topics": [],
     }
-    get_session_summary_file(scope).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def updater(summary: dict[str, Any]) -> tuple[dict[str, Any], None]:
+        recent_topics = list(summary.get("recent_topics") or [])
+        compact_user_message = user_message.strip().replace("\n", " ")
+        if compact_user_message:
+            recent_topics.append(compact_user_message[:80])
+        payload = {
+            "session_scope": _sanitize_scope(scope),
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+            "latest_user_message": compact_user_message[:500],
+            "latest_assistant_reply_excerpt": assistant_reply.strip().replace("\n", " ")[:800],
+            "recent_topics": recent_topics[-5:],
+        }
+        return payload, None
+
+    update_json_locked(get_session_summary_file(scope), fallback, updater)
 
 
 def clear_session_context(scope: str | None = None) -> None:
@@ -1107,7 +1078,7 @@ def clear_session_context(scope: str | None = None) -> None:
 
     working_state_file = get_working_state_file(scope)
     if working_state_file.exists():
-        working_state_file.write_text(json.dumps(DEFAULT_WORKING_STATE, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json_atomic(working_state_file, DEFAULT_WORKING_STATE)
 
     summary_file = get_session_summary_file(scope)
     summary_payload = {
@@ -1117,11 +1088,28 @@ def clear_session_context(scope: str | None = None) -> None:
         "latest_assistant_reply_excerpt": "",
         "recent_topics": [],
     }
-    summary_file.write_text(json.dumps(summary_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_atomic(summary_file, summary_payload)
 
 
 def _extract_query_keywords(text: str) -> set[str]:
     return {item.lower() for item in KEYWORD_EXTRACTOR.findall(text or "") if len(item) >= 2}
+
+
+def _memory_importance_keys(entry: StructuredMemoryEntry) -> list[str]:
+    keys = [entry.identity]
+    if entry.slot:
+        keys.append(entry.slot)
+        keys.append(f"{entry.category}:{entry.slot}")
+    keys.append(entry.content[:80])
+    return keys
+
+
+def _memory_importance_key(category: str, section: list[str], content: str) -> str:
+    slot = _section_slot(section)
+    if slot:
+        return f"{category}:{slot}"
+    title = _extract_section_title(section)
+    return f"{category}:{title}" if title else f"{category}:{content[:80]}"
 
 
 def _score_memory_entry(entry: StructuredMemoryEntry, query_keywords: set[str], importance_scores: dict[str, float] | None = None) -> float:
@@ -1202,9 +1190,10 @@ def _score_memory_entry(entry: StructuredMemoryEntry, query_keywords: set[str], 
 
     frequency_bonus = 0.0
 
-    if importance_scores and entry.slot and entry.slot in importance_scores:
-
-        frequency_bonus = (importance_scores[entry.slot] - 1.0) * 0.3
+    if importance_scores:
+        memory_score = max((importance_scores.get(key, 1.0) for key in _memory_importance_keys(entry)), default=1.0)
+        topic_score = max((importance_scores.get(keyword, 1.0) for keyword in entry_keywords), default=1.0)
+        frequency_bonus = max(memory_score - 1.0, 0.0) * 0.3 + max(topic_score - 1.0, 0.0) * 0.08
 
 
 
@@ -1219,7 +1208,7 @@ def _render_ranked_memory_sections(category: str, title: str, path: Path, query_
 
         return f"## {title}\n- 暂无记录。"
 
-    existing = path.read_text(encoding="utf-8")
+    existing = read_text_locked(path)
 
     preamble, sections = _split_markdown_sections(existing)
 
@@ -1416,6 +1405,13 @@ def build_context_snapshot(scope: str | None = None, query_text: str | None = No
     freq_state = load_frequency_state()
 
     importance_scores = _compute_importance_scores(freq_state)
+    saved_importance_scores = load_importance_state().get("memory_scores", {})
+    if isinstance(saved_importance_scores, dict):
+        for key, value in saved_importance_scores.items():
+            try:
+                importance_scores[str(key)] = float(value)
+            except (TypeError, ValueError):
+                continue
 
 
 
@@ -1466,9 +1462,7 @@ def append_conversation_record(user_message: str, assistant_reply: str, session_
 
     }
 
-    with file_path.open("a", encoding="utf-8") as file:
-
-        file.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    _append_jsonl(file_path, payload)
 
     save_session_summary(session_scope, user_message, assistant_reply)
 
@@ -1505,7 +1499,7 @@ def load_recent_conversation_turns(
             file_date = datetime.strptime(date_match.group(1), "%Y-%m-%d")
             if file_date < cutoff:
                 continue
-            lines = log_file.read_text(encoding="utf-8").splitlines()
+            lines = read_text_locked(log_file).splitlines()
         except (OSError, ValueError):
             continue
 
@@ -1593,6 +1587,22 @@ def _get_promote_delay_seconds(reason: str | None) -> int:
 
 
 
+def _is_age_archivable(metadata: MemoryMetadata | None) -> bool:
+    if metadata is None:
+        return True
+    confidence = metadata.confidence.strip().lower()
+    scope = metadata.scope.strip().lower()
+    source = metadata.source.strip().lower()
+    reason = metadata.reason.strip().lower()
+    durable_sources = {"user_explicit", "manual_remember", "candidate_promoted", "candidate_auto_promoted", "nightly_reflection"}
+    durable_reasons = {"explicit_remember", "addressing_user", "assistant_name", "language_preference", "response_rule", "future_rule"}
+    if scope == "global" and confidence in {"high", "medium"} and (source in durable_sources or reason in durable_reasons):
+        return False
+    if scope == "global" and confidence == "high":
+        return False
+    return True
+
+
 def auto_promote_candidates() -> list[Path]:
 
     promoted: list[Path] = []
@@ -1603,11 +1613,11 @@ def auto_promote_candidates() -> list[Path]:
 
     for candidate_path in list_memory_candidates(limit=100):
 
-        content = candidate_path.read_text(encoding="utf-8").strip()
+        content = read_text_locked(candidate_path).strip()
 
         if not content:
 
-            candidate_path.unlink()
+            unlink_locked(candidate_path)
 
             continue
 
@@ -1617,7 +1627,7 @@ def auto_promote_candidates() -> list[Path]:
 
         if not body:
 
-            candidate_path.unlink()
+            unlink_locked(candidate_path)
 
             continue
 
@@ -1658,7 +1668,7 @@ def auto_promote_candidates() -> list[Path]:
             tags=[str(item) for item in parsed_metadata.get("tags") or []] if isinstance(parsed_metadata.get("tags"), list) else [],
         )
         target = append_structured_long_term_memory(body, safe_category, slot, candidate_metadata)
-        candidate_path.unlink()
+        unlink_locked(candidate_path)
 
         promoted.append(target)
 
@@ -1688,7 +1698,8 @@ def archive_old_memories() -> list[Path]:
 
 
 
-        existing = path.read_text(encoding="utf-8")
+        with locked_path(path):
+            existing = read_text_unlocked(path)
 
         preamble, sections = _split_markdown_sections(existing)
 
@@ -1731,7 +1742,9 @@ def archive_old_memories() -> list[Path]:
             if metadata is not None and metadata.scope == "session" and section_date is not None:
                 is_stale_session = (now - section_date).days > 7
 
-            if is_expired or is_decayed_temporary or is_stale_session or (section_date and (now - section_date).days > cutoff_days):
+            is_age_expired = bool(section_date and (now - section_date).days > cutoff_days and _is_age_archivable(metadata))
+
+            if is_expired or is_decayed_temporary or is_stale_session or is_age_expired:
                 archived_sections.append(section)
             else:
                 kept_sections.append(section)
@@ -1751,7 +1764,7 @@ def archive_old_memories() -> list[Path]:
 
                 archive_lines.extend(section)
 
-            archive_file.write_text("\n".join(archive_lines).rstrip() + "\n", encoding="utf-8")
+            write_text_atomic(archive_file, "\n".join(archive_lines).rstrip() + "\n")
 
             archived.append(archive_file)
 
@@ -1767,7 +1780,8 @@ def archive_old_memories() -> list[Path]:
 
                 rebuilt_lines.extend(section)
 
-            path.write_text("\n".join(rebuilt_lines).rstrip() + "\n", encoding="utf-8")
+            with locked_path(path):
+                write_text_atomic_unlocked(path, "\n".join(rebuilt_lines).rstrip() + "\n")
 
 
 
@@ -1881,7 +1895,7 @@ def _read_recent_conversation_records(limit: int = 40, days: int = 3) -> list[di
             file_date = datetime.strptime(date_match.group(1), "%Y-%m-%d")
             if file_date < cutoff:
                 continue
-            for line in reversed(log_file.read_text(encoding="utf-8").splitlines()):
+            for line in reversed(read_text_locked(log_file).splitlines()):
                 if len(records) >= limit:
                     return records
                 try:
@@ -1898,7 +1912,7 @@ def _read_recent_conversation_records(limit: int = 40, days: int = 3) -> list[di
 def _load_candidate_briefs(limit: int = 20) -> list[dict[str, Any]]:
     briefs: list[dict[str, Any]] = []
     for path in list_memory_candidates(limit=limit):
-        content = path.read_text(encoding="utf-8", errors="replace").strip()
+        content = read_text_locked(path, errors="replace").strip()
         body = content.split("\n\n", maxsplit=2)[-1].strip() if content else ""
         metadata = _parse_candidate_metadata(content)
         briefs.append(
@@ -1918,7 +1932,7 @@ def _load_structured_memory_briefs() -> list[dict[str, Any]]:
     for category, path in LONG_TERM_FILES.items():
         if not path.exists():
             continue
-        _, sections = _split_markdown_sections(path.read_text(encoding="utf-8"))
+        _, sections = _split_markdown_sections(read_text_locked(path))
         for entry in _build_structured_entries(category, sections):
             briefs.append(
                 {
@@ -1943,7 +1957,7 @@ def _archive_slots(category: str, slots: list[str], reason: str) -> list[str]:
     path = LONG_TERM_FILES.get(category)
     if path is None or not path.exists() or not slots:
         return []
-    existing = path.read_text(encoding="utf-8")
+    existing = read_text_locked(path)
     preamble, sections = _split_markdown_sections(existing)
     kept_sections: list[list[str]] = []
     archived_sections: list[list[str]] = []
@@ -1963,7 +1977,7 @@ def _archive_slots(category: str, slots: list[str], reason: str) -> list[str]:
         if rebuilt_lines and rebuilt_lines[-1].strip() != "":
             rebuilt_lines.append("")
         rebuilt_lines.extend(section)
-    path.write_text("\n".join(rebuilt_lines).rstrip() + "\n", encoding="utf-8")
+    write_text_atomic(path, "\n".join(rebuilt_lines).rstrip() + "\n")
     return archived_slots
 
 
@@ -1971,24 +1985,15 @@ async def reflect_and_rewrite_memories() -> dict[str, Any]:
     report_path = MEMORY_REPORTS_DIR / f"memory_reflection_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     report: dict[str, Any] = {
         "used_model": False,
-        "provider": AGENT_PROVIDER,
+        "provider": "",
+        "model": "",
         "applied_rewrites": [],
         "promoted_candidates": [],
         "archived_slots": [],
         "raw_response": "",
+        "model_errors": [],
         "report_file": report_path.name,
     }
-    if AGENT_PROVIDER.strip().lower() != "claude" or not ANTHROPIC_API_KEY:
-        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-        return report
-
-    try:
-        from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, query
-    except Exception as exc:
-        logger.warning("Memory reflection disabled because Claude SDK is unavailable: %s", exc)
-        report["sdk_error"] = str(exc)
-        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-        return report
 
     memories = _load_structured_memory_briefs()
 
@@ -2051,49 +2056,21 @@ async def reflect_and_rewrite_memories() -> dict[str, Any]:
         )
 
 
+    provider_override = AGENT_PROVIDER if AGENT_PROVIDER != _CONFIG_AGENT_PROVIDER else None
+    api_key_override = ANTHROPIC_API_KEY if ANTHROPIC_API_KEY != _CONFIG_ANTHROPIC_API_KEY else None
+    model_result = await run_reflection_model(combined_prompt, provider_override=provider_override, api_key_override=api_key_override)
+    report["provider"] = model_result.provider
+    report["model"] = model_result.model
+    report["used_model"] = model_result.used_model
+    report["raw_response"] = model_result.text
+    report["model_errors"] = model_result.errors
+    if model_result.errors:
+        write_json_atomic(report_path, report)
+        return report
 
-    options = ClaudeAgentOptions(
-
-        permission_mode="acceptEdits",
-
-        env={
-
-            "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
-
-            "ANTHROPIC_BASE_URL": ANTHROPIC_BASE_URL,
-
-            "ANTHROPIC_MODEL": ANTHROPIC_MODEL,
-
-        },
-
-        cwd=str(WORKSPACE_DIR),
-
-        tools=[],
-
-        allowed_tools=[],
-
-        system_prompt="你是 WeClaw 的夜间记忆反思器。你的任务是识别可以重写沉淀的长期规则、应该晋升的候选记忆，以及应该归档的过期 slot。只返回 JSON，不要解释。",
-
-    )
-
-
-
-    text_parts: list[str] = []
-
-    async for message in query(prompt=combined_prompt, options=options):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    text_parts.append(block.text)
-        elif isinstance(message, ResultMessage) and message.result:
-            text_parts.append(message.result)
-
-    raw_response = "\n".join(part for part in text_parts if part).strip()
-    report["raw_response"] = raw_response
-    report["used_model"] = True
     actions: dict[str, Any]
     try:
-        actions = json.loads(_strip_json_fence(raw_response)) if raw_response else {}
+        actions = json.loads(_strip_json_fence(model_result.text)) if model_result.text else {}
     except json.JSONDecodeError:
         actions = {}
         report["parse_failed"] = True
@@ -2144,7 +2121,7 @@ async def reflect_and_rewrite_memories() -> dict[str, Any]:
         if archived:
             report["archived_slots"].append({"category": category, "slots": archived})
 
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_atomic(report_path, report)
     return report
 
 
@@ -2192,7 +2169,7 @@ def meditate_and_organize_memories() -> dict[str, Any]:
 
 
 
-        existing = path.read_text(encoding="utf-8")
+        existing = read_text_locked(path)
 
         preamble, sections = _split_markdown_sections(existing)
 
@@ -2321,7 +2298,8 @@ def meditate_and_organize_memories() -> dict[str, Any]:
             if content:
                 metadata = _parse_memory_metadata(section)
                 importance = calculate_memory_importance(content, frequency_state) + _metadata_importance_bonus(metadata)
-                meditation_report["importance_scores"][content[:80]] = round(importance, 2)
+                importance_key = _memory_importance_key(category, section, content)
+                meditation_report["importance_scores"][importance_key] = round(importance, 2)
                 if importance < 1.0 and len(merged_sections) > 3:
                     cleaned_count += 1
                     continue
@@ -2352,7 +2330,7 @@ def meditate_and_organize_memories() -> dict[str, Any]:
 
                 rebuilt_lines.extend(section)
 
-            path.write_text("\n".join(rebuilt_lines).rstrip() + "\n", encoding="utf-8")
+            write_text_atomic(path, "\n".join(rebuilt_lines).rstrip() + "\n")
 
 
 
@@ -2392,7 +2370,7 @@ def clean_old_conversations() -> list[Path]:
 
             if file_date < cutoff:
 
-                log_file.unlink()
+                unlink_locked(log_file)
 
                 cleaned.append(log_file)
 

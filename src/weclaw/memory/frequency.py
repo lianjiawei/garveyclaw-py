@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from weclaw.config import (
     MEMORY_DIR,
 )
+from weclaw.memory.io import read_json_locked, write_json_atomic
 
 MEMORY_FREQUENCY_FILE = MEMORY_DIR / "frequency.json"
 MEMORY_IMPORTANCE_FILE = MEMORY_DIR / "importance.json"
@@ -32,18 +31,12 @@ def _extract_keywords(text: str) -> list[str]:
 
 
 def load_frequency_state() -> dict[str, Any]:
-    if not MEMORY_FREQUENCY_FILE.exists():
-        return dict(DEFAULT_FREQUENCY_STATE)
-    try:
-        data = json.loads(MEMORY_FREQUENCY_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else dict(DEFAULT_FREQUENCY_STATE)
-    except (OSError, json.JSONDecodeError):
-        return dict(DEFAULT_FREQUENCY_STATE)
+    return read_json_locked(MEMORY_FREQUENCY_FILE, DEFAULT_FREQUENCY_STATE)
 
 
 def save_frequency_state(state: dict[str, Any]) -> None:
     state["last_updated"] = datetime.now().isoformat(timespec="seconds")
-    MEMORY_FREQUENCY_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_atomic(MEMORY_FREQUENCY_FILE, state)
 
 
 def update_memory_frequency(user_message: str, assistant_reply: str) -> dict[str, Any]:
@@ -71,18 +64,12 @@ def get_high_frequency_topics(threshold: int = 3, window: int = 50) -> list[tupl
 
 
 def load_importance_state() -> dict[str, Any]:
-    if not MEMORY_IMPORTANCE_FILE.exists():
-        return dict(DEFAULT_IMPORTANCE_STATE)
-    try:
-        data = json.loads(MEMORY_IMPORTANCE_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else dict(DEFAULT_IMPORTANCE_STATE)
-    except (OSError, json.JSONDecodeError):
-        return dict(DEFAULT_IMPORTANCE_STATE)
+    return read_json_locked(MEMORY_IMPORTANCE_FILE, DEFAULT_IMPORTANCE_STATE)
 
 
 def save_importance_state(state: dict[str, Any]) -> None:
     state["last_meditation"] = datetime.now().isoformat(timespec="seconds")
-    MEMORY_IMPORTANCE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_atomic(MEMORY_IMPORTANCE_FILE, state)
 
 
 def calculate_memory_importance(content: str, frequency_state: dict[str, Any] | None = None) -> float:
