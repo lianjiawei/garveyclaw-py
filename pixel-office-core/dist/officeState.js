@@ -87,7 +87,7 @@ export class OfficeState {
         const nextIds = new Set(agents.map((agent) => agent.id));
         for (const existingId of Array.from(this.characters.keys())) {
             if (!nextIds.has(existingId))
-                this.characters.delete(existingId);
+                this.removeAgent(existingId);
         }
         for (const agent of agents)
             this.upsertAgent(agent);

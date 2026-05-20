@@ -114,7 +114,7 @@ export class OfficeState {
   setAgents(agents: PixelOfficeAgentInput[]): void {
     const nextIds = new Set(agents.map((agent) => agent.id));
     for (const existingId of Array.from(this.characters.keys())) {
-      if (!nextIds.has(existingId)) this.characters.delete(existingId);
+      if (!nextIds.has(existingId)) this.removeAgent(existingId);
     }
     for (const agent of agents) this.upsertAgent(agent);
   }
