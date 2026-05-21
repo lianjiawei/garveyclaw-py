@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import sys
@@ -124,7 +125,7 @@ def _print_startup_preflight_error() -> None:
     raise SystemExit(2)
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
 
     if not argv:
@@ -180,6 +181,14 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.print_help()
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        print("\n已取消。")
+        return 130
 
 
 if __name__ == "__main__":
