@@ -54,7 +54,7 @@ from weclaw.memory.session import load_session_id, save_session_id
 
 if TYPE_CHECKING:
 
-    from telegram import Update
+    pass
 
 
 

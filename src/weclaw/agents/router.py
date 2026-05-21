@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 
 
 
-from weclaw.config import AGENT_PROVIDER
 
 from weclaw.core.provider_state import get_provider
 

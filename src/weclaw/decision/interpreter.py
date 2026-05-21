@@ -8,13 +8,9 @@ from urllib.parse import urljoin
 import httpx
 
 from weclaw.config import (
-    ANTHROPIC_API_KEY,
-    ANTHROPIC_BASE_URL,
     DECISION_INTERPRETER_MAX_PROMPT_CHARS,
     DECISION_INTERPRETER_MODE,
     DECISION_INTERPRETER_TIMEOUT_SECONDS,
-    OPENAI_API_KEY,
-    OPENAI_BASE_URL,
 )
 from weclaw.core.provider_model import get_effective_api_key, get_effective_base_url, get_effective_model
 from weclaw.decision.models import TaskIntent
@@ -195,7 +191,6 @@ def _compute_signal_confidence(
 ) -> tuple[float, str]:
     """多信号置信度评分：组合启发式信号计算置信度。"""
     signals: list[tuple[str, float]] = []
-    lowered = text.lower()
 
     # 信号 1: 目标明确度
     if has_target:
@@ -274,7 +269,6 @@ def _compute_signal_confidence(
 def _detect_ambiguity(text: str, intent_type: str, has_target: bool, confidence: float) -> str:
     """歧义检测：当意图不明确时返回歧义说明。"""
     notes: list[str] = []
-    lowered = text.lower()
 
     # 检测 1: 歧义词汇
     if _AMBIGUITY_RE.search(text):

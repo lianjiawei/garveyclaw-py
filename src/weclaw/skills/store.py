@@ -642,8 +642,6 @@ def validate_skills() -> list[str]:
 
         name = _loader._first_str(fm.get('name', ''), file_path.stem)
 
-        title = _loader._first_str(fm.get('title', ''), file_path.stem)
-
         description = _loader._first_str(fm.get('description', ''), '')
 
         keywords = _loader._as_tuple(fm.get('keywords', ()))

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import weclaw.config as config
-from weclaw.agentspec.models import AgentExecutionMode, AgentMemoryScope, AgentRole, AgentSpec
+from weclaw.agentspec.models import AgentSpec
 
 _NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{1,63}$")
 _ROLES: set[str] = {"planner", "executor", "reviewer", "researcher", "coder", "custom"}

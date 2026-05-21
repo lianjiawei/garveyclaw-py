@@ -68,32 +68,6 @@ build-backend = "hatchling.build"
 packages = [
 
     "src/weclaw",
-    "src/weclaw/agentspec",
-    "src/weclaw/agents",
-    "src/weclaw/capabilities",
-
-    "src/weclaw/channels",
-
-    "src/weclaw/channels/telegram",
-
-    "src/weclaw/channels/feishu",
-
-    "src/weclaw/channels/weixin",
-
-    "src/weclaw/cluster",
-    "src/weclaw/core",
-
-    "src/weclaw/decision",
-
-    "src/weclaw/media",
-
-    "src/weclaw/memory",
-
-    "src/weclaw/monitor",
-
-    "src/weclaw/skills",
-
-    "src/weclaw/tasks",
 
 ]
 

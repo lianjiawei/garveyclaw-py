@@ -311,9 +311,9 @@ async def run_cluster_tasks_serial(
         )
         return result
 
-    async def review_executor_result(cluster_task: ClusterTask, result: AgentTaskResult) -> tuple[bool, str]:
+    async def review_executor_result(cluster_task: ClusterTask, result: AgentTaskResult) -> tuple[bool, str, str]:
         if not reviewer_enabled:
-            return True, ""
+            return True, "", "approved"
         review_task = ClusterTask(
             task_id=f"{cluster_task.task_id}:review:{cluster_task.attempt_count + 1}",
             cluster_id=cluster_task.cluster_id,
@@ -330,12 +330,21 @@ async def run_cluster_tasks_serial(
         )
         review_result = await run_one(review_task)
         results.append(review_result)
-        needs_retry, outcome, fallback_summary = _executor_task_needs_retry(result)
-        summary = review_result.text.strip() or fallback_summary
+        review_text = review_result.text.strip()
+        _, review_outcome, review_summary = _review_result_to_outcome(review_text)
+        executor_needs_retry, _, executor_summary = _executor_task_needs_retry(result)
+        summary = review_summary if review_text else executor_summary
         attempt_count = cluster_task.attempt_count + 1
-        next_state = "ready" if needs_retry else "done"
-        final_outcome = "changes_requested" if needs_retry else "approved"
-        if attempt_count >= cluster_task.max_attempts and needs_retry:
+        if review_outcome == "rejected":
+            final_outcome = "rejected"
+            next_state = "error"
+        elif review_outcome == "changes_requested" or executor_needs_retry:
+            final_outcome = "changes_requested"
+            next_state = "ready"
+        else:
+            final_outcome = "approved"
+            next_state = "done"
+        if attempt_count >= cluster_task.max_attempts and final_outcome == "changes_requested":
             final_outcome = "rejected"
             next_state = "error"
             summary = review_result.text.strip() or "Reviewer rejected executor result after max attempts."
@@ -348,7 +357,7 @@ async def run_cluster_tasks_serial(
             next_state=next_state,
             attempt_count=attempt_count,
         )
-        return (final_outcome == "approved"), summary
+        return (final_outcome == "approved"), summary, final_outcome
 
     while pending:
         ready = [
@@ -458,12 +467,12 @@ async def run_cluster_tasks_serial(
                 any(agent.agent_id == cluster_task.assigned_agent and agent.role == "executor" for agent in blueprint.agents)
                 and not _has_explicit_reviewer_task(cluster_tasks, cluster_task.task_id, reviewer_id)
             ):
-                approved, review_summary = await review_executor_result(cluster_task, result)
+                approved, review_summary, review_outcome = await review_executor_result(cluster_task, result)
                 if not approved:
                     current = task_index[cluster_task.task_id]
                     next_attempt = current.attempt_count + 1
                     max_attempts = current.max_attempts
-                    if next_attempt >= max_attempts:
+                    if review_outcome == "rejected" or next_attempt >= max_attempts:
                         failed_result = AgentTaskResult(
                             agent_name=reviewer_id,
                             task_id=cluster_task.task_id,

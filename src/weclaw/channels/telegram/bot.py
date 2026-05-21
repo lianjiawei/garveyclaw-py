@@ -8,10 +8,6 @@ from dataclasses import dataclass
 
 from io import BytesIO
 
-from datetime import datetime, timedelta, timezone
-
-
-
 from telegram import BotCommand, Update
 
 from telegram.error import BadRequest, NetworkError, TelegramError
@@ -64,7 +60,7 @@ from weclaw.core.confirmation import (
 
 )
 
-from weclaw.core.response import AgentFile, AgentReply
+from weclaw.core.response import AgentReply
 
 from weclaw.agents.router import AgentServiceError, build_telegram_conversation
 
@@ -87,7 +83,7 @@ from weclaw.config import (
 
 )
 
-from weclaw.media.store import FilePayload, load_photo_message, save_uploaded_file, save_voice_message
+from weclaw.media.store import load_photo_message, save_uploaded_file, save_voice_message
 
 from weclaw.memory.intent import build_memory_intent_ack, detect_memory_intent, should_auto_accept_memory_intent
 
@@ -367,8 +363,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
 
         text = update.message.text.strip()
-
-        lower_text = text.lower()
 
         pending = get_pending_confirmation(update.effective_chat.id) if update.effective_chat else None
 
@@ -1312,77 +1306,10 @@ async def schedule_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
         return
 
-
-
-    if len(context.args) < 2:
-
-        await reply_plain_text(update, "用法：/schedule_in 秒数 任务内容")
-
-        return
-
-
-
-    try:
-
-        delay_seconds = int(context.args[0])
-
-    except ValueError:
-
-        await reply_plain_text(update, "秒数必须是整数，例如：/schedule_in 60 1分钟后提醒我喝水")
-
-        return
-
-
-
-    if delay_seconds <= 0:
-
-        await reply_plain_text(update, "秒数必须大于 0。")
-
-        return
-
-
-
-    prompt = " ".join(context.args[1:]).strip()
-
-    if not prompt:
-
-        await reply_plain_text(update, "任务内容不能为空。")
-
-        return
-
-
-
-    if update.effective_chat is None:
-
-        await reply_plain_text(update, "当前消息没有可用的 chat_id。")
-
-        return
-
-
-
-    run_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
-
-    conversation = build_telegram_conversation(update)
-
-    task_id = await create_scheduled_task(conversation, prompt, run_at)
-
-    local_time = run_at.astimezone().strftime("%Y-%m-%d %H:%M:%S")
-
-    await reply_plain_text(
-
-        update,
-
-        "定时任务已创建。\n"
-
-        f"- 任务ID：{task_id}\n"
-
-        "- 类型：单次任务\n"
-
-        f"- 执行时间：{local_time}\n"
-
-        f"- 内容：{prompt}",
-
-    )
+    task_text = f"/schedule_in {' '.join(context.args)}".strip()
+    task_result = await handle_task_command(build_telegram_conversation(update), task_text)
+    if task_result.handled:
+        await reply_plain_text(update, task_result.message)
 
 
 
@@ -1463,7 +1390,6 @@ async def handle_model(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     if not is_owner(update):
         return
-    provider = get_provider()
     if not context.args:
         await reply_plain_text(update, render_model_profiles())
         return
