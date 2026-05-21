@@ -436,6 +436,9 @@ def _masked_input(prompt: str) -> str:
         chars: list[str] = []
         while True:
             char = msvcrt.getwch()
+            if char in {"\x00", "\xe0"}:
+                msvcrt.getwch()
+                continue
             if char in {"\r", "\n"}:
                 finish_line()
                 return "".join(chars)
@@ -451,12 +454,15 @@ def _masked_input(prompt: str) -> str:
                     sys.stdout.write("\b \b")
                     sys.stdout.flush()
                 continue
+            if char == "\x1b" or not char.isprintable():
+                continue
             chars.append(char)
             sys.stdout.write("*")
             sys.stdout.flush()
 
     import termios
     import tty
+    import select
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -481,6 +487,13 @@ def _masked_input(prompt: str) -> str:
                     chars.pop()
                     sys.stdout.write("\b \b")
                     sys.stdout.flush()
+                continue
+            if char == "\x1b":
+                while select.select([sys.stdin], [], [], 0.03)[0]:
+                    if sys.stdin.read(1).endswith(("~", "A", "B", "C", "D", "M", "I", "O")):
+                        break
+                continue
+            if not char.isprintable():
                 continue
             chars.append(char)
             sys.stdout.write("*")
