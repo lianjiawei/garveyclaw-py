@@ -38,6 +38,10 @@ def _slugify(value: str) -> str:
     return text or "default"
 
 
+def normalize_model_profile_id(value: str) -> str:
+    return _slugify(value)
+
+
 def _env_profiles() -> dict[str, ModelProfile]:
     profiles: dict[str, ModelProfile] = {}
     env_route = normalize_provider(AGENT_PROVIDER, default="openai")
@@ -226,6 +230,21 @@ def upsert_model_profile(profile: ModelProfile, *, activate: bool = True) -> Mod
     return normalized
 
 
+def delete_model_profile(profile_id: str) -> bool:
+    raw = _load_raw()
+    profiles = raw.get("profiles") or []
+    kept = [item for item in profiles if not isinstance(item, dict) or item.get("id") != profile_id]
+    if len(kept) == len(profiles):
+        return False
+    raw["profiles"] = kept
+    if raw.get("active_profile") == profile_id:
+        raw.pop("active_profile", None)
+    _save_raw(raw)
+    active = get_active_model_profile()
+    _sync_active_profile_to_env(active)
+    return True
+
+
 def find_profile_by_protocol(protocol: str) -> ModelProfile | None:
     normalized = normalize_provider(protocol, default="")
     active = get_active_model_profile()
@@ -329,5 +348,6 @@ def render_model_profiles() -> str:
     lines.append("命令:")
     lines.append("- /model 查看并选择")
     lines.append("- /model <编号或profile_id> [model] 切换")
+    lines.append("- weclaw model use 打开交互式模型选择")
     lines.append(f"- weclaw model refresh {active.id} 刷新当前配置的模型列表")
     return "\n".join(lines)

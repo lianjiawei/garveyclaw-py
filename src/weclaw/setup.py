@@ -11,7 +11,20 @@ from typing import Iterable
 
 from weclaw.config import PROJECT_ROOT
 from weclaw.core.model_discovery import discover_models
-from weclaw.core.model_profiles import ModelProfile, get_active_model_profile, list_model_profiles, render_model_profiles, set_active_model_profile, update_profile_available_models, upsert_model_profile
+from weclaw.core.interactive import SelectOption, select_option, select_text_candidate
+from weclaw.core.model_manager import prompt_model_profile_fields
+from weclaw.core.model_profiles import (
+    ModelProfile,
+    get_active_model_profile,
+    list_model_profiles,
+    normalize_model_profile_id,
+    render_model_profiles,
+    resolve_model_profile_selector,
+    set_active_model_profile,
+    update_profile_available_models,
+    upsert_model_profile,
+)
+from weclaw.core.model_selector import select_model_profile_and_model
 from weclaw.core.provider_state import normalize_provider
 
 ENV_FILE = PROJECT_ROOT / ".env"
@@ -493,6 +506,15 @@ def _choose(label: str, options: list[tuple[str, str]], default: str) -> str:
         if value == normalized_default:
             default_index = index
 
+    selected = select_option(
+        "WeClaw 设置",
+        label,
+        [SelectOption(value, description) for value, description in options],
+        default=options[default_index - 1][0],
+    )
+    if selected:
+        return selected
+
     print(label)
     for index, (value, description) in enumerate(options, 1):
         marker = " *" if value == normalized_default else ""
@@ -558,6 +580,16 @@ def _default_profile_for_protocol(protocol: str) -> ModelProfile | None:
 def _select_discovered_model(current_model: str, models: list[str], *, non_interactive: bool) -> str:
     if not models or non_interactive:
         return current_model
+    selected = select_text_candidate(
+        "选择模型",
+        "检测到服务商可用模型，使用 ↑↓ 选择，Enter 确认；列表里没有也可以手动输入。",
+        models,
+        current=current_model,
+        allow_manual=True,
+        manual_label="手动输入 model id",
+    )
+    if selected:
+        return selected
     print("")
     print("检测到服务商可用模型：")
     for index, model_id in enumerate(models[:30], 1):
@@ -586,11 +618,133 @@ def _discover_models_for_setup(profile: ModelProfile, *, non_interactive: bool) 
     return []
 
 
+def _stage_profile_env_updates(updates: dict[str, str], profile: ModelProfile) -> None:
+    profile_id = normalize_model_profile_id(profile.id)
+    updates["MODEL_PROFILE_NAME"] = profile_id
+    updates["AGENT_PROVIDER"] = profile.protocol
+    updates["AGENT_ROUTE"] = profile.protocol
+    if profile.protocol == "openai":
+        updates["OPENAI_API_KEY"] = profile.api_key
+        updates["OPENAI_BASE_URL"] = profile.base_url
+        updates["OPENAI_MODEL"] = profile.model
+    else:
+        updates["ANTHROPIC_API_KEY"] = profile.api_key
+        updates["ANTHROPIC_BASE_URL"] = profile.base_url
+        updates["ANTHROPIC_MODEL"] = profile.model
+
+
+def _render_setup_summary(updates: dict[str, str], profile: ModelProfile | None, channel: str) -> str:
+    lines = ["请确认即将写入的配置：", ""]
+    if profile is not None:
+        lines.extend(
+            [
+                "模型 Provider",
+                f"- 名称: {normalize_model_profile_id(profile.id)}",
+                f"- 协议: {'OpenAI-compatible' if profile.protocol == 'openai' else 'Anthropic-compatible'}",
+                f"- 模型: {profile.model or '(empty)'}",
+                f"- Base URL: {profile.base_url or '(default endpoint)'}",
+                f"- API Key: {_mask_secret(profile.api_key)}",
+                f"- 候选模型: {len(profile.available_models)}",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "入口通道",
+            f"- 当前选择: {channel or 'none'}",
+            f"- Telegram: {'已配置' if updates.get('TELEGRAM_BOT_TOKEN') else '未配置'}",
+            f"- Feishu: {'已配置' if updates.get('FEISHU_APP_ID') and updates.get('FEISHU_APP_SECRET') else '未配置'}",
+            f"- Weixin: {'已配置' if updates.get('WEIXIN_ACCOUNT_ID') and updates.get('WEIXIN_TOKEN') else '未配置'}",
+            "",
+            "高级配置",
+            f"- Tavily: {'已配置' if updates.get('TAVILY_API_KEY') else '未配置'}",
+            f"- Dashboard: {updates.get('WECLAW_DASHBOARD_HOST', '')}:{updates.get('WECLAW_DASHBOARD_PORT', '')}",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _confirm_setup_summary(updates: dict[str, str], profile: ModelProfile | None, channel: str) -> str:
+    print("")
+    print(_render_setup_summary(updates, profile, channel))
+    selected = select_option(
+        "配置摘要",
+        "确认后才会写入 .env 和模型 profile。",
+        [
+            SelectOption("save", "确认保存"),
+            SelectOption("model", "修改模型 Provider"),
+            SelectOption("channel", "修改入口通道"),
+            SelectOption("advanced", "修改高级配置"),
+            SelectOption("restart", "重新开始向导"),
+            SelectOption("cancel", "取消，不写入"),
+        ],
+        default="save",
+    )
+    return selected or "cancel"
+
+
+def _prompt_channel_config(args: argparse.Namespace, values: dict[str, str], updates: dict[str, str]) -> str:
+    channel = _choose(
+        "请选择使用入口：",
+        [
+            ("tui", "本地 TUI（推荐先用这个测试模型）"),
+            ("telegram", "Telegram Bot"),
+            ("weixin", "Weixin personal account"),
+            ("feishu", "Feishu 机器人"),
+            ("none", "暂不配置入口，只启动 Core Dashboard"),
+        ],
+        _default_channel(values),
+    )
+    channel = (channel or "none").lower()
+    if channel == "tui":
+        channel = "none"
+
+    if channel == "telegram":
+        token = _prompt("TELEGRAM_BOT_TOKEN", "" if not _has_value(values, "TELEGRAM_BOT_TOKEN") else _value(values, "TELEGRAM_BOT_TOKEN"), secret=True)
+        owner = _prompt("OWNER_ID (Telegram user id)", "" if not _has_value(values, "OWNER_ID") else _value(values, "OWNER_ID"))
+        updates["TELEGRAM_BOT_TOKEN"] = token
+        updates["OWNER_ID"] = owner
+    elif channel == "feishu":
+        app_id = _prompt("FEISHU_APP_ID", "" if not _has_value(values, "FEISHU_APP_ID") else _value(values, "FEISHU_APP_ID"))
+        app_secret = _prompt("FEISHU_APP_SECRET", "" if not _has_value(values, "FEISHU_APP_SECRET") else _value(values, "FEISHU_APP_SECRET"), secret=True)
+        updates["FEISHU_APP_ID"] = app_id
+        updates["FEISHU_APP_SECRET"] = app_secret
+    elif channel == "weixin":
+        credentials = _run_weixin_qr_login(args)
+        if credentials:
+            updates["WEIXIN_ACCOUNT_ID"] = credentials["account_id"]
+            updates["WEIXIN_TOKEN"] = credentials["token"]
+            updates["WEIXIN_BASE_URL"] = credentials["base_url"]
+    elif channel == "none":
+        updates.update({"TELEGRAM_BOT_TOKEN": "", "OWNER_ID": "", "FEISHU_APP_ID": "", "FEISHU_APP_SECRET": "", "WEIXIN_ACCOUNT_ID": "", "WEIXIN_TOKEN": ""})
+    return channel
+
+
+def _prompt_advanced_config(args: argparse.Namespace, values: dict[str, str], updates: dict[str, str]) -> None:
+    tavily_key = _prompt(
+        "TAVILY_API_KEY（可选；跳过会使用系统默认轻量搜索）",
+        "" if not _has_value(values, "TAVILY_API_KEY") else _value(values, "TAVILY_API_KEY"),
+        secret=True,
+    )
+    updates["TAVILY_API_KEY"] = tavily_key
+
+    dashboard_host = args.dashboard_host or _value(values, "WECLAW_DASHBOARD_HOST") or DEFAULTS["WECLAW_DASHBOARD_HOST"]
+    if _has_value(values, "WECLAW_DASHBOARD_HOST"):
+        default_host = dashboard_host
+    else:
+        default_host = "127.0.0.1" if _is_windows() else dashboard_host
+        if _yes_no("Dashboard 是否允许公网/局域网访问", default=False):
+            default_host = "0.0.0.0"
+    updates["WECLAW_DASHBOARD_HOST"] = _prompt("WECLAW_DASHBOARD_HOST", default_host)
+    updates["WECLAW_DASHBOARD_PORT"] = str(args.dashboard_port or _value(values, "WECLAW_DASHBOARD_PORT") or DEFAULTS["WECLAW_DASHBOARD_PORT"])
+
+
 def run_setup(args: argparse.Namespace) -> int:
     _configure_stdio()
     created = ensure_env_file()
     values = load_env_values()
     updates: dict[str, str] = {}
+    pending_profile: ModelProfile | None = None
 
     print("WeClaw 初始化向导")
     print(f"- 配置文件: {ENV_FILE}")
@@ -647,21 +801,18 @@ def run_setup(args: argparse.Namespace) -> int:
                 non_interactive=args.non_interactive,
             )
             model = _select_discovered_model(model, available_models, non_interactive=args.non_interactive)
-        if not args.non_interactive:
+        if not args.non_interactive and not available_models:
             model = _prompt("模型名（填写服务商给你的 model id，例如 gpt-4o-mini、deepseek-chat、qwen-plus）", model)
-        updates["OPENAI_MODEL"] = model
-        profile = upsert_model_profile(
-            ModelProfile(
-                id=profile_name.strip() or "openai-default",
-                name=profile_name.strip() or "OpenAI compatible",
-                protocol="openai",
-                api_key=key or "",
-                base_url=base_url or "",
-                model=model or "",
-                available_models=tuple(available_models),
-            )
+        pending_profile = ModelProfile(
+            id=profile_name.strip() or "openai-default",
+            name=profile_name.strip() or "OpenAI compatible",
+            protocol="openai",
+            api_key=key or "",
+            base_url=base_url or "",
+            model=model or "",
+            available_models=tuple(available_models),
         )
-        updates["MODEL_PROFILE_NAME"] = profile.id
+        _stage_profile_env_updates(updates, pending_profile)
     else:
         profile_name = getattr(args, "profile_name", None) or (existing_profile.id if existing_profile else "") or _value(values, "MODEL_PROFILE_NAME") or "claude-default"
         if not args.non_interactive:
@@ -694,21 +845,18 @@ def run_setup(args: argparse.Namespace) -> int:
                 non_interactive=args.non_interactive,
             )
             model = _select_discovered_model(model, available_models, non_interactive=args.non_interactive)
-        if not args.non_interactive:
+        if not args.non_interactive and not available_models:
             model = _prompt("模型名（填写服务商给你的 model id）", model)
-        updates["ANTHROPIC_MODEL"] = model
-        profile = upsert_model_profile(
-            ModelProfile(
-                id=profile_name.strip() or "claude-default",
-                name=profile_name.strip() or "Anthropic compatible",
-                protocol="claude",
-                api_key=key or "",
-                base_url=base_url or "",
-                model=model or "",
-                available_models=tuple(available_models),
-            )
+        pending_profile = ModelProfile(
+            id=profile_name.strip() or "claude-default",
+            name=profile_name.strip() or "Anthropic compatible",
+            protocol="claude",
+            api_key=key or "",
+            base_url=base_url or "",
+            model=model or "",
+            available_models=tuple(available_models),
         )
-        updates["MODEL_PROFILE_NAME"] = profile.id
+        _stage_profile_env_updates(updates, pending_profile)
 
     channel = args.channel
     print("")
@@ -798,6 +946,30 @@ def run_setup(args: argparse.Namespace) -> int:
         existing = _value(values, key)
         updates.setdefault(key, existing if existing and _has_value(values, key) else value)
 
+    if not args.non_interactive:
+        while True:
+            decision = _confirm_setup_summary(updates, pending_profile, channel)
+            if decision == "save":
+                break
+            if decision == "cancel":
+                print("已取消，未写入配置。")
+                return 1
+            if decision == "restart":
+                print("重新开始配置向导。")
+                return run_setup(args)
+            if decision == "model":
+                updated_profile = asyncio.run(prompt_model_profile_fields(pending_profile))
+                if updated_profile is not None:
+                    pending_profile = updated_profile
+                    _stage_profile_env_updates(updates, pending_profile)
+            if decision == "channel":
+                channel = _prompt_channel_config(args, values, updates)
+            if decision == "advanced":
+                _prompt_advanced_config(args, values, updates)
+
+    if pending_profile is not None:
+        profile = upsert_model_profile(pending_profile)
+        updates["MODEL_PROFILE_NAME"] = profile.id
     set_env_values(updates)
     issues = validate_env(load_env_values(), require_channel=channel != "none")
     print("")
@@ -945,7 +1117,7 @@ def run_model_add(args: argparse.Namespace) -> int:
             non_interactive=not interactive,
         )
         model = _select_discovered_model(model, available_models, non_interactive=not interactive)
-    if interactive:
+    if interactive and not available_models:
         model = _prompt("模型名（可直接回车使用上面选择的模型，或手动输入）", model)
     profile = upsert_model_profile(
         ModelProfile(
@@ -974,8 +1146,19 @@ def run_model_add(args: argparse.Namespace) -> int:
 
 def run_model_use(args: argparse.Namespace) -> int:
     _configure_stdio()
+    profile_selector = getattr(args, "profile", None)
+    model = getattr(args, "model", None)
+    if not profile_selector:
+        selected = select_model_profile_and_model()
+        if selected is None:
+            print(render_model_profiles())
+            print("")
+            print("未选择模型 Provider。也可以使用: weclaw model use <编号或profile_id> [model]")
+            return 2
+        profile_selector, model = selected
     try:
-        profile = set_active_model_profile(args.profile, args.model)
+        profile_id = resolve_model_profile_selector(profile_selector).id
+        profile = set_active_model_profile(profile_id, model)
     except ValueError as exc:
         print(str(exc))
         return 2
@@ -1097,7 +1280,7 @@ def build_parser() -> argparse.ArgumentParser:
     model_refresh_parser = model_subparsers.add_parser("refresh", help="从服务商接口刷新可选模型列表")
     model_refresh_parser.add_argument("profile", nargs="?")
     model_use_parser = model_subparsers.add_parser("use", help="切换当前模型 Provider")
-    model_use_parser.add_argument("profile")
+    model_use_parser.add_argument("profile", nargs="?")
     model_use_parser.add_argument("model", nargs="?")
 
     channel_parser = subparsers.add_parser("channel", help="快速配置 Telegram / Feishu 通道")

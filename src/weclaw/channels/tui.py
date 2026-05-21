@@ -67,6 +67,8 @@ from weclaw.core.confirmation import (
 from weclaw.core.response import AgentReply
 
 from weclaw.config import PROJECT_ROOT, SHOW_TOOL_TRACE, TUI_OUTPUT_DIR, WORKSPACE_DIR
+from weclaw.core.interactive import SelectOption, prompt_text, select_option
+from weclaw.core.model_manager import run_model_manager_once
 from weclaw.core.model_profiles import render_model_profiles, resolve_model_profile_selector, set_active_model_profile
 from weclaw.core.provider_model import get_effective_model, get_provider_mode_label
 from weclaw.core.provider_state import get_provider
@@ -82,7 +84,8 @@ from weclaw.memory.store import append_memory_candidate, append_structured_long_
 
 from weclaw.tasks.runtime import start_background_scheduler, stop_background_scheduler
 
-from weclaw.tasks.service import handle_task_command
+from weclaw.tasks.scheduler import format_schedule_description
+from weclaw.tasks.service import build_task_display_text, handle_task_command, list_scheduled_tasks
 
 from weclaw.tasks.store import init_task_db
 
@@ -199,6 +202,7 @@ COMMANDS = [
     CommandInfo("/provider", "查看当前 Agent Provider"),
     CommandInfo("/model", "查看或切换模型 Provider"),
     CommandInfo("/schedule_in", "创建单次定时任务"),
+    CommandInfo("/schedule", "自然语言创建定时任务"),
 
     CommandInfo("/tasks", "查看当前 TUI 定时任务"),
 
@@ -226,7 +230,7 @@ COMMAND_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Session", ("/status", "/clear", "/retry", "/reset", "/provider", "/model", "/exit")),
     ("Input", ("/paste", "/plan")),
     ("Capabilities", ("/skills", "/tools", "/workflows")),
-    ("Tasks", ("/schedule_in", "/tasks", "/cancel")),
+    ("Tasks", ("/schedule_in", "/schedule", "/tasks", "/cancel")),
     ("Permissions", ("/grants", "/revoke")),
 )
 
@@ -781,6 +785,65 @@ def render_command_palette() -> str:
     return "\n".join(lines).rstrip()
 
 
+def select_command_from_palette() -> str | None:
+    return select_option(
+        "WeClaw 命令面板",
+        "使用 ↑↓ 选择命令，Enter 执行，Esc 取消。",
+        [SelectOption(command.name, command.name, command.description) for command in COMMANDS],
+        default="/model",
+    )
+
+
+async def build_palette_command(command_name: str, conversation, state: TuiState) -> str | None:
+    if command_name == "/schedule_in":
+        seconds = prompt_text("多少秒后执行", default="60")
+        if not seconds:
+            return None
+        content = prompt_text("任务内容", default="")
+        if not content:
+            return None
+        return f"/schedule_in {seconds} {content}"
+
+    if command_name == "/schedule":
+        content = prompt_text("定时任务（例如：明天上午9点提醒我看日报）", default="")
+        return f"/schedule {content}" if content else None
+
+    if command_name == "/cancel":
+        tasks = await list_scheduled_tasks(conversation.channel, conversation.target_id)
+        if not tasks:
+            return "/tasks"
+        options: list[SelectOption] = []
+        for task in tasks:
+            local_time = datetime.fromisoformat(task["next_run"]).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+            schedule_desc = format_schedule_description(task.get("schedule_type", "once"), task.get("schedule_value"))
+            options.append(
+                SelectOption(
+                    str(task["id"]),
+                    f"{local_time}  |  {build_task_display_text(task['prompt'])}",
+                    schedule_desc,
+                )
+            )
+        task_id = select_option("取消定时任务", "选择要取消的任务。", options)
+        return f"/cancel {task_id}" if task_id else None
+
+    if command_name == "/revoke":
+        grants = list_session_tool_grants(state.session_scope)
+        if not grants:
+            return "/grants"
+        tool_name = select_option(
+            "撤销工具授权",
+            "选择要撤销会话授权的工具。",
+            [SelectOption(grant.tool_name, grant.tool_name, f"{grant.risk_level}/{grant.category}") for grant in grants],
+        )
+        return f"/revoke {tool_name}" if tool_name else None
+
+    if command_name in {"/skills", "/tools", "/workflows", "/plan"}:
+        value = prompt_text(f"{command_name} 参数（可直接回车跳过）", default="")
+        return f"{command_name} {value}".strip() if value else command_name
+
+    return command_name
+
+
 def read_prompt() -> str:
     return pt_prompt(
 
@@ -1240,7 +1303,15 @@ async def run_tui() -> None:
 
             if command in {"/exit", "/quit", "exit", "quit"}:
                 break
-            if command in {"/help", "/palette", "/commands"}:
+            if command == "/palette":
+                selected_command = await asyncio.to_thread(select_command_from_palette)
+                if not selected_command:
+                    continue
+                prompt = await build_palette_command(selected_command, conversation, state)
+                if not prompt:
+                    continue
+                command = prompt.lower()
+            if command in {"/help", "/commands"}:
                 print_help()
                 continue
             if command == "/clear":
@@ -1283,14 +1354,20 @@ async def run_tui() -> None:
             if command.startswith("/model"):
                 parts = prompt.split(maxsplit=1)
                 if len(parts) == 1:
-                    print_message_block("Model", render_model_profiles(), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
+                    message = await run_model_manager_once()
+                    state.provider = get_provider()
+                    print_message_block("Model", message, subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
                     continue
-                args = parts[1].strip().split()
-                if args and args[0].lower() == "use":
-                    args = args[1:]
-                if not args:
-                    print_message_block("Model", render_model_profiles(), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
-                    continue
+                else:
+                    args = parts[1].strip().split()
+                    if args and args[0].lower() in {"list", "show"}:
+                        print_message_block("Model", render_model_profiles(), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
+                        continue
+                    if args and args[0].lower() == "use":
+                        args = args[1:]
+                    if not args:
+                        print_message_block("Model", render_model_profiles(), subtitle=build_meta_subtitle(datetime.now().strftime("%H:%M:%S"), "Runtime"), accent=THEME_PRIMARY)
+                        continue
                 try:
                     profile_id = resolve_model_profile_selector(args[0]).id
                     profile = set_active_model_profile(profile_id, " ".join(args[1:]) if len(args) > 1 else None)
