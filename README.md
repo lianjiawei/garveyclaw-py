@@ -8,7 +8,7 @@ WeClaw Py 是一个面向长期运行、可扩展和可观测的多通道 AI Age
 - 双 Provider 路由：Claude / OpenAI
 - 统一能力层：tools / workflows / skills
 - 文件读写、命令执行、联网搜索、定时任务、分层记忆
-- Dashboard 可视化：classic / v2 / core
+- Dashboard 可视化：core
 - 多 Agent 集群 runtime foundation：planner / executor / reviewer 基础模型与监控投影
 
 当前它不是一个“最终形态的自治 Agent Swarm”，但已经是一个可直接运行、可继续演进到多 Agent 协作系统的工程底座。
@@ -96,17 +96,11 @@ scripts/                    Linux 启停脚本
 
 ## Dashboard
 
-项目当前有 3 个 dashboard 入口：
+项目当前保留一个 dashboard 入口：
 
-- classic：`/`
-- v2：`/v2`
 - core：`/core`
 
-其中：
-
-- `classic` 是早期基础看板
-- `v2` 是当前 cluster 可视化主界面
-- `core` 使用 `pixel-office-core` 独立渲染像素办公室
+`core` 使用 `pixel-office-core` 独立渲染像素办公室。历史 dashboard 已下线，根路径 `/` 会跳转到 `/core`。
 
 如果通过主程序启动，dashboard 会随主进程一起启动。
 
@@ -729,8 +723,6 @@ weclaw channel setup weixin
 
 本地访问：
 
-- `http://127.0.0.1:8765/`
-- `http://127.0.0.1:8765/v2`
 - `http://127.0.0.1:8765/core`
 
 云服务器访问：
@@ -903,14 +895,11 @@ sudo ufw status
 启动成功后通常会看到类似输出：
 
 ```text
-Dashboard: http://<your-ip>:8765 (classic) | http://<your-ip>:8765/v2
-Core Dashboard: http://<your-ip>:8765/core
+Dashboard: http://<your-ip>:8765/core
 ```
 
 常用页面：
 
-- `http://<your-ip>:8765/`
-- `http://<your-ip>:8765/v2`
 - `http://<your-ip>:8765/core`
 
 ### 8. 查看日志

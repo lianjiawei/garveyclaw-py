@@ -65,12 +65,12 @@ def run_status() -> int:
         if _is_process_alive(pid):
             print(f"WeClaw is running. PID: {pid}")
             print(f"Log: {LOG_FILE}")
-            print(f"Dashboard: {dashboard} | {dashboard}/v2 | {dashboard}/core")
+            print(f"Dashboard: {dashboard}/core")
             print("View logs: weclaw logs")
             print("Stop: weclaw stop")
             return 0
         print(f"WeClaw PID file exists but process is not running. PID: {pid}")
-        print(f"Remove stale PID file or run: weclaw stop")
+        print("Remove stale PID file or run: weclaw stop")
         return 1
     print("WeClaw is not running in background mode.")
     print("Start background mode: weclaw start")

@@ -118,12 +118,11 @@ echo ""
 if [ "$API_READY" -ne 1 ]; then
     echo "Warning: dashboard API health check did not pass: http://127.0.0.1:${DASHBOARD_PORT}/api/activity"
 fi
-echo "Dashboard: http://${ACCESS_HOST}:${DASHBOARD_PORT} (classic) | http://${ACCESS_HOST}:${DASHBOARD_PORT}/v2"
 if [ -f "$CORE_DASHBOARD_FILE" ]; then
-    echo "Core Dashboard: http://${ACCESS_HOST}:${DASHBOARD_PORT}/core"
+    echo "Dashboard: http://${ACCESS_HOST}:${DASHBOARD_PORT}/core"
     if [ "$CORE_READY" -ne 1 ]; then
         echo "Warning: core dashboard health check did not pass: http://127.0.0.1:${DASHBOARD_PORT}/core"
     fi
 else
-    echo "Core Dashboard: unavailable (missing $CORE_DASHBOARD_FILE)"
+    echo "Dashboard: unavailable (missing $CORE_DASHBOARD_FILE)"
 fi

@@ -96,9 +96,7 @@ if ($listener) {
 $env:WECLAW_DASHBOARD_PORT = [string]$Port
 
 Write-Step "Starting WeClaw Dashboard"
-Write-Host "Classic: http://127.0.0.1:$Port/"
-Write-Host "V2:      http://127.0.0.1:$Port/v2/"
-Write-Host "Core:    http://127.0.0.1:$Port/core/"
+Write-Host "Dashboard: http://127.0.0.1:$Port/core/"
 Write-Host ""
 Write-Host "Press Ctrl+C to stop the server."
 Write-Host ""
