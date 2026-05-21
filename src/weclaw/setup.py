@@ -511,6 +511,8 @@ def _choose(label: str, options: list[tuple[str, str]], default: str) -> str:
         label,
         [SelectOption(value, description) for value, description in options],
         default=options[default_index - 1][0],
+        cancel_value=options[default_index - 1][0],
+        error_value=options[default_index - 1][0],
     )
     if selected:
         return selected

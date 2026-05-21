@@ -56,15 +56,19 @@ def _read_key() -> str:
         char = sys.stdin.read(1)
         if char == "\x1b":
             sequence = ""
-            while select.select([sys.stdin], [], [], 0.02)[0]:
+            while select.select([sys.stdin], [], [], 0.03)[0] and len(sequence) < 12:
                 sequence += sys.stdin.read(1)
-                if len(sequence) >= 2:
+                if sequence.endswith(("~", "A", "B", "C", "D", "M")):
                     break
-            if sequence == "[A":
+            if not sequence:
+                return "escape"
+            if sequence.endswith("A"):
                 return "up"
-            if sequence == "[B":
+            if sequence.endswith("B"):
                 return "down"
-            return "escape"
+            if sequence.endswith("M"):
+                return "enter"
+            return ""
 
     if char in {"\r", "\n"}:
         return "enter"
@@ -97,6 +101,8 @@ def select_option(
     options: Sequence[SelectOption],
     *,
     default: str | None = None,
+    cancel_value: str | None = None,
+    error_value: str | None = None,
 ) -> str | None:
     if not options or not is_interactive_terminal():
         return None
@@ -143,7 +149,7 @@ def select_option(
                 elif key == "escape":
                     sys.stdout.write("\n")
                     sys.stdout.flush()
-                    return None
+                    return cancel_value
                 elif key.isdigit():
                     index = int(key)
                     if 1 <= index <= min(len(options), 9):
@@ -154,9 +160,9 @@ def select_option(
     except (EOFError, KeyboardInterrupt):
         sys.stdout.write("\n")
         sys.stdout.flush()
-        return None
+        return cancel_value
     except Exception:
-        return None
+        return error_value
 
 
 def prompt_text(
