@@ -22,7 +22,7 @@ import aiohttp
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from weclaw.agents.router import build_weixin_conversation
+from weclaw.agents.router import AgentServiceError, build_weixin_conversation
 from weclaw.agents.runtime import run_agent_for_conversation
 from weclaw.config import (
     DATA_DIR,
@@ -1247,15 +1247,23 @@ class WeixinBot:
         else:
             prompt = text
             record_text = text
-        reply = await run_agent_for_conversation(
-            prompt=prompt,
-            conversation=conversation,
-            sender=self.sender,
-            continue_session=True,
-            record_text=record_text,
-            uploaded_image=photo_payload,
-            uploaded_file=file_payload,
-        )
+        try:
+            reply = await run_agent_for_conversation(
+                prompt=prompt,
+                conversation=conversation,
+                sender=self.sender,
+                continue_session=True,
+                record_text=record_text,
+                uploaded_image=photo_payload,
+                uploaded_file=file_payload,
+            )
+        except AgentServiceError as exc:
+            logger.warning("Weixin agent service failed for chat=%s sender=%s: %s", target_id, sender_id, exc)
+            await self._send_agent_reply(
+                conversation.target_id,
+                AgentReply.from_text(f"抱歉，这次调用模型服务失败了：{exc}"),
+            )
+            return
         await self._send_agent_reply(conversation.target_id, reply)
 
     def _is_dm_allowed(self, sender_id: str) -> bool:

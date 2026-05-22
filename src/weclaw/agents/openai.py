@@ -98,6 +98,61 @@ def _without_provider_options(payload: dict[str, Any]) -> dict[str, Any]:
     return fallback
 
 
+def _should_retry_without_provider_options(payload: dict[str, Any], status_code: int, error_preview: str) -> bool:
+    if "enable_thinking" not in payload or status_code not in {400, 422}:
+        return False
+    error_lower = error_preview.lower()
+    if "reasoning_content" in error_lower or "thinking mode" in error_lower:
+        return False
+    return "enable_thinking" in error_lower
+
+
+def _is_missing_reasoning_content_error(status_code: int, error_preview: str) -> bool:
+    if status_code not in {400, 422}:
+        return False
+    error_lower = error_preview.lower()
+    return "reasoning_content" in error_lower and "thinking" in error_lower
+
+
+def _payload_with_textual_history(payload: dict[str, Any]) -> dict[str, Any] | None:
+    messages = payload.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return None
+    if any(isinstance(message, dict) and message.get("role") == "tool" for message in messages):
+        return None
+
+    system_messages = [message for message in messages if isinstance(message, dict) and message.get("role") == "system"]
+    last_user_index = -1
+    for index, message in enumerate(messages):
+        if isinstance(message, dict) and message.get("role") == "user":
+            last_user_index = index
+    if last_user_index <= 0:
+        return None
+
+    final_user = messages[last_user_index]
+    history_lines: list[str] = []
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") == "system":
+            continue
+        if message is final_user:
+            break
+        role = str(message.get("role") or "").strip()
+        content = extract_text_from_content_value(message.get("content")).strip()
+        if role in {"user", "assistant"} and content:
+            history_lines.append(f"{role}: {content}")
+
+    if not history_lines:
+        return None
+
+    history_message = {
+        "role": "user",
+        "content": "以下是本会话较早的文字历史，仅作为上下文参考，不需要逐字复述：\n" + "\n".join(history_lines),
+    }
+    fallback = dict(payload)
+    fallback["messages"] = [*system_messages, history_message, final_user]
+    return fallback
+
+
 def _chat_timeout() -> httpx.Timeout:
     timeout = max(float(OPENAI_CHAT_TIMEOUT_SECONDS), 30.0)
     return httpx.Timeout(timeout=timeout, connect=30.0, write=30.0, pool=30.0)
@@ -581,6 +636,7 @@ async def stream_chat_completion(
     *,
 
     timeout_hint: str,
+    retry_textual_history: bool = True,
 
 ) -> Any:
 
@@ -599,14 +655,27 @@ async def stream_chat_completion(
 
             error_text = await response.aread()
             error_preview = error_text.decode("utf-8", errors="replace")[:500]
-            if "enable_thinking" in payload and response.status_code in {400, 422}:
+            if _should_retry_without_provider_options(payload, response.status_code, error_preview):
                 logger.info("OpenAI %s rejected enable_thinking; retrying without provider-specific option.", timeout_hint)
                 return await stream_chat_completion(
                     client,
                     headers,
                     _without_provider_options(payload),
                     timeout_hint=timeout_hint,
+                    retry_textual_history=retry_textual_history,
                 )
+
+            if retry_textual_history and _is_missing_reasoning_content_error(response.status_code, error_preview):
+                textual_payload = _payload_with_textual_history(payload)
+                if textual_payload is not None:
+                    logger.info("OpenAI %s requested reasoning_content; retrying with textual history context.", timeout_hint)
+                    return await stream_chat_completion(
+                        client,
+                        headers,
+                        textual_payload,
+                        timeout_hint=timeout_hint,
+                        retry_textual_history=False,
+                    )
 
             raise RuntimeError(
 
@@ -625,6 +694,7 @@ async def call_chat_completion(
     payload: dict[str, Any],
     *,
     timeout_hint: str,
+    retry_textual_history: bool = True,
 ) -> str:
     response = await client.post(
         f"{get_effective_base_url('openai').rstrip('/')}/chat/completions",
@@ -632,17 +702,30 @@ async def call_chat_completion(
         json=payload,
     )
     if response.status_code != 200:
-        if "enable_thinking" in payload and response.status_code in {400, 422}:
+        error_preview = response.text[:500]
+        if _should_retry_without_provider_options(payload, response.status_code, error_preview):
             logger.info("OpenAI %s rejected enable_thinking; retrying without provider-specific option.", timeout_hint)
             return await call_chat_completion(
                 client,
                 headers,
                 _without_provider_options(payload),
                 timeout_hint=timeout_hint,
+                retry_textual_history=retry_textual_history,
             )
+        if retry_textual_history and _is_missing_reasoning_content_error(response.status_code, error_preview):
+            textual_payload = _payload_with_textual_history(payload)
+            if textual_payload is not None:
+                logger.info("OpenAI %s requested reasoning_content; retrying with textual history context.", timeout_hint)
+                return await call_chat_completion(
+                    client,
+                    headers,
+                    textual_payload,
+                    timeout_hint=timeout_hint,
+                    retry_textual_history=False,
+                )
         raise RuntimeError(
             f"OpenAI {timeout_hint} chat/completions failed: HTTP {response.status_code} - "
-            f"{response.text[:500]}"
+            f"{error_preview}"
         )
     payload = response.json()
     choices = payload.get("choices", [])
@@ -945,31 +1028,20 @@ async def run_openai_agent(
                         if tool_round + 1 >= max_tool_rounds:
                             state.tool_round_limit_hit = True
 
-                        messages.append(
-
-                            {
-
-                                "role": "assistant",
-
-                                "tool_calls": [
-
-                                    {
-
-                                        "id": call.id,
-
-                                        "type": "function",
-
-                                        "function": {"name": call.name, "arguments": call.arguments},
-
-                                    }
-
-                                    for call in stream_result.tool_calls
-
-                                ],
-
-                            }
-
-                        )
+                        assistant_tool_message: dict[str, Any] = {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "id": call.id,
+                                    "type": "function",
+                                    "function": {"name": call.name, "arguments": call.arguments},
+                                }
+                                for call in stream_result.tool_calls
+                            ],
+                        }
+                        if stream_result.reasoning_text:
+                            assistant_tool_message["reasoning_content"] = stream_result.reasoning_text
+                        messages.append(assistant_tool_message)
 
 
 

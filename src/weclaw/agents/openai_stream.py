@@ -28,6 +28,9 @@ class OpenAIChatStreamResult:
 def extract_text_from_content_value(value: Any) -> str:
     if isinstance(value, str):
         return value
+    if isinstance(value, dict):
+        text = value.get("text") or value.get("content") or value.get("value") or ""
+        return text if isinstance(text, str) else ""
     if not isinstance(value, list):
         return ""
 
@@ -39,6 +42,30 @@ def extract_text_from_content_value(value: Any) -> str:
         if not isinstance(item, dict):
             continue
         text = item.get("text") or item.get("content") or item.get("value") or ""
+        if isinstance(text, str) and text:
+            parts.append(text)
+    return "".join(parts)
+
+
+def extract_reasoning_from_content_value(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        text = value.get("reasoning_content") or value.get("reasoning") or value.get("thinking") or ""
+        return text if isinstance(text, str) else ""
+    if not isinstance(value, list):
+        return ""
+
+    parts: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            continue
+        if not isinstance(item, dict):
+            continue
+        item_type = str(item.get("type") or "").lower()
+        text = item.get("reasoning_content") or item.get("reasoning") or item.get("thinking") or ""
+        if not text and item_type in {"reasoning", "thinking"}:
+            text = item.get("text") or item.get("content") or item.get("value") or ""
         if isinstance(text, str) and text:
             parts.append(text)
     return "".join(parts)
@@ -76,12 +103,19 @@ def extract_chat_chunk_reasoning_text(chunk: dict[str, Any]) -> str:
     for candidate in (
         delta.get("reasoning_content"),
         delta.get("reasoning"),
+        delta.get("thinking"),
         message.get("reasoning_content"),
         message.get("reasoning"),
+        message.get("thinking"),
     ):
-        text = extract_text_from_content_value(candidate)
+        text = extract_reasoning_from_content_value(candidate)
         if text:
             return text
+    for candidate in (delta.get("content"), message.get("content")):
+        if isinstance(candidate, (list, dict)):
+            text = extract_reasoning_from_content_value(candidate)
+            if text:
+                return text
     return ""
 
 
